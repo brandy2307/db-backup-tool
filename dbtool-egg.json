@@ -5,10 +5,10 @@
     "update_url": null
   },
   "exported_at": "2024-06-02T14:40:56+00:00",
-  "name": "DB Backup Tool",
+  "name": "DB Backup Tool (Auto-Update)",
   "author": "admin@example.com",
   "uuid": "db9f372e-01d7-4c9b-a109-e49990d68d46",
-  "description": "Automatisches Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreSQL und MongoDB.",
+  "description": "Automatisches Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreSQL und MongoDB. Unterstützt Auto-Updates von GitHub.",
   "features": null,
   "docker_images": {
     "ghcr.io/parkervcp/yolks:nodejs_18": "ghcr.io/parkervcp/yolks:nodejs_18"
@@ -23,12 +23,45 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# DB Backup Tool Installation Script\n#\n# Server Files: /mnt/server\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\ndie() {\n  local message=\"$1\"\n  printf \"\\n%s\\n\" \"${message}\"\n  exit 2\n}\n\ncd_error() {\n  die \"ERROR: Installation encountered an error while trying to change directory\"\n}\n\nmain() {\n  echo \"Starting installation...\"\n  \n  # Update package list\n  apt update\n  \n  # Install basic dependencies\n  apt install -y wget curl gnupg2 software-properties-common\n  \n  # Install Node.js 18.x\n  curl -fsSL https://deb.nodesource.com/setup_18.x | bash -\n  apt install -y nodejs\n  \n  # Install database clients with error handling\n  echo \"Installing database clients...\"\n  apt install -y mysql-client || apt install -y default-mysql-client\n  apt install -y postgresql-client || apt install -y postgresql-client-common\n  \n  # Install MongoDB tools\n  echo \"Installing MongoDB tools...\"\n  curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg\n  echo \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main\" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list\n  apt update\n  apt install -y mongodb-database-tools || echo \"MongoDB tools installation failed, continuing...\"\n  \n  # Verify installations\n  echo \"Verifying installations...\"\n  which mysqldump && echo \"mysqldump: OK\" || echo \"mysqldump: FAILED\"\n  which pg_dump && echo \"pg_dump: OK\" || echo \"pg_dump: FAILED\"\n  which mongodump && echo \"mongodump: OK\" || echo \"mongodump: FAILED\"\n  \n  cd \"${DIR}\" || cd_error\n  \n  mkdir -p \"${APP_DIR}\"\n  cd \"${APP_DIR}\" || cd_error\n  \n  cat <<'EOF' > package.json\n{\n  \"name\": \"db-backup-tool\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Database Backup Tool with Web Interface\",\n  \"main\": \"server.js\",\n  \"scripts\": {\n    \"start\": \"node server.js\",\n    \"dev\": \"nodemon server.js\"\n  },\n  \"dependencies\": {\n    \"express\": \"^4.18.2\",\n    \"express-rate-limit\": \"^6.7.0\",\n    \"multer\": \"^1.4.5-lts.1\",\n    \"node-cron\": \"^3.0.2\",\n    \"bcryptjs\": \"^2.4.3\",\n    \"jsonwebtoken\": \"^9.0.0\",\n    \"express-session\": \"^1.17.3\",\n    \"helmet\": \"^6.1.5\",\n    \"compression\": \"^1.7.4\",\n    \"cors\": \"^2.8.5\"\n  },\n  \"devDependencies\": {\n    \"nodemon\": \"^2.0.22\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\nEOF\n  \n  npm install\n  \n  mkdir -p backups logs config public/css public/js\n  \n  cat <<'EOF' > config.json\n{\n  \"server\": {\n    \"port\": 8080,\n    \"host\": \"0.0.0.0\"\n  },\n  \"security\": {\n    \"sessionSecret\": \"change-this-secret-key-in-production\",\n    \"jwtSecret\": \"change-this-jwt-secret-in-production\",\n    \"defaultAdmin\": {\n      \"username\": \"admin\",\n      \"password\": \"admin123\"\n    }\n  },\n  \"backup\": {\n    \"defaultPath\": \"./backups\",\n    \"maxBackups\": 10,\n    \"compression\": true\n  },\n  \"logging\": {\n    \"level\": \"info\",\n    \"file\": \"./logs/app.log\"\n  }\n}\nEOF\n  \n  printf \"\\nInstallation Complete\\n\"\n  printf \"\\nDefault Login:\\n\"\n  printf \"Username: admin\\n\"\n  printf \"Password: admin123\\n\"\n  printf \"\\nBitte ändere das Passwort nach dem ersten Login!\\n\"\n  \n  # Final verification\n  echo \"\\n=== FINAL VERIFICATION ===\"\n  echo \"Node.js: $(node --version)\"\n  echo \"NPM: $(npm --version)\"\n  echo \"mysqldump: $(which mysqldump || echo 'NOT FOUND')\"\n  echo \"pg_dump: $(which pg_dump || echo 'NOT FOUND')\"\n  echo \"mongodump: $(which mongodump || echo 'NOT FOUND')\"\n  echo \"=========================\"\n}\n\nmain \"@\"",
+      "script": "#!/bin/bash\n# DB Backup Tool Installation Script mit Auto-Update\n#\n# Server Files: /mnt/server\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\ndeclare -r GITHUB_REPO=\"{{GITHUB_REPOSITORY}}\"\ndeclare -r BRANCH=\"{{GITHUB_BRANCH}}\"\n\ndie() {\n  local message=\"$1\"\n  printf \"\\n%s\\n\" \"${message}\"\n  exit 2\n}\n\ncd_error() {\n  die \"ERROR: Installation encountered an error while trying to change directory\"\n}\n\nmain() {\n  echo \"Starting installation with auto-update support...\"\n  echo \"Repository: ${GITHUB_REPO}\"\n  echo \"Branch: ${BRANCH}\"\n  \n  # Update package list\n  apt update\n  \n  # Install basic dependencies + git\n  apt install -y wget curl gnupg2 software-properties-common git\n  \n  # Install Node.js 18.x\n  curl -fsSL https://deb.nodesource.com/setup_18.x | bash -\n  apt install -y nodejs\n  \n  # Install database clients with error handling\n  echo \"Installing database clients...\"\n  apt install -y mysql-client || apt install -y default-mysql-client\n  apt install -y postgresql-client || apt install -y postgresql-client-common\n  \n  # Install MongoDB tools\n  echo \"Installing MongoDB tools...\"\n  curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg\n  echo \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main\" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list\n  apt update\n  apt install -y mongodb-database-tools || echo \"MongoDB tools installation failed, continuing...\"\n  \n  # Verify installations\n  echo \"Verifying installations...\"\n  which mysqldump && echo \"mysqldump: OK\" || echo \"mysqldump: FAILED\"\n  which pg_dump && echo \"pg_dump: OK\" || echo \"pg_dump: FAILED\"\n  which mongodump && echo \"mongodump: OK\" || echo \"mongodump: FAILED\"\n  which git && echo \"git: OK\" || echo \"git: FAILED\"\n  \n  cd \"${DIR}\" || cd_error\n  \n  # Clone or update repository\n  if [ -d \"${APP_DIR}/.git\" ]; then\n    echo \"Repository already exists, updating...\"\n    cd \"${APP_DIR}\" || cd_error\n    git fetch origin\n    git reset --hard origin/${BRANCH}\n    echo \"Repository updated to latest version\"\n  else\n    echo \"Cloning repository...\"\n    rm -rf \"${APP_DIR}\"\n    git clone -b ${BRANCH} \"${GITHUB_REPO}\" \"${APP_DIR}\"\n    cd \"${APP_DIR}\" || cd_error\n    echo \"Repository cloned successfully\"\n  fi\n  \n  # Install/update npm dependencies\n  echo \"Installing/updating npm dependencies...\"\n  npm install --production\n  \n  # Create directories\n  mkdir -p backups logs config\n  \n  # Create default config if it doesn't exist\n  if [ ! -f \"config.json\" ]; then\n    cat <<'EOF' > config.json\n{\n  \"server\": {\n    \"port\": 8080,\n    \"host\": \"0.0.0.0\"\n  },\n  \"security\": {\n    \"sessionSecret\": \"change-this-secret-key-in-production\",\n    \"jwtSecret\": \"change-this-jwt-secret-in-production\",\n    \"defaultAdmin\": {\n      \"username\": \"admin\",\n      \"password\": \"admin123\"\n    }\n  },\n  \"backup\": {\n    \"defaultPath\": \"./backups\",\n    \"maxBackups\": 10,\n    \"compression\": true\n  },\n  \"logging\": {\n    \"level\": \"info\",\n    \"file\": \"./logs/app.log\"\n  },\n  \"updates\": {\n    \"autoUpdate\": true,\n    \"repository\": \"{{GITHUB_REPOSITORY}}\",\n    \"branch\": \"{{GITHUB_BRANCH}}\"\n  }\n}\nEOF\n    echo \"Default config.json created\"\n  else\n    echo \"Existing config.json found, updating auto-update settings...\"\n    # Update config with new repository settings if needed\n    node -e \"\n      const fs = require('fs');\n      const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));\n      config.updates = config.updates || {};\n      config.updates.autoUpdate = config.updates.autoUpdate !== false;\n      config.updates.repository = '{{GITHUB_REPOSITORY}}';\n      config.updates.branch = '{{GITHUB_BRANCH}}';\n      fs.writeFileSync('config.json', JSON.stringify(config, null, 2));\n      console.log('Config updated with auto-update settings');\n    \"\n  fi\n  \n  # Create update script\n  cat <<'EOF' > update.sh\n#!/bin/bash\n# Auto-Update Script für DB Backup Tool\n\necho \"🔄 Checking for updates...\"\n\n# Backup current config\nif [ -f \"config.json\" ]; then\n    cp config.json config.json.backup\n    echo \"📋 Config backed up\"\nfi\n\n# Backup schedules if they exist\nif [ -f \"backups/schedules.json\" ]; then\n    cp backups/schedules.json backups/schedules.json.backup\n    echo \"📋 Schedules backed up\"\nfi\n\n# Check if we're in a git repository\nif [ ! -d \".git\" ]; then\n    echo \"❌ Not a git repository, skipping update\"\n    exit 0\nfi\n\n# Fetch latest changes\ngit fetch origin\n\n# Check if update is available\nLOCAL=$(git rev-parse HEAD)\nREMOTE=$(git rev-parse origin/{{GITHUB_BRANCH}})\n\nif [ \"$LOCAL\" = \"$REMOTE\" ]; then\n    echo \"✅ Already up to date\"\nelse\n    echo \"🔄 Update available, updating...\"\n    \n    # Update code\n    git reset --hard origin/{{GITHUB_BRANCH}}\n    \n    # Update dependencies\n    npm install --production\n    \n    # Restore config\n    if [ -f \"config.json.backup\" ]; then\n        mv config.json.backup config.json\n        echo \"📋 Config restored\"\n    fi\n    \n    # Restore schedules\n    if [ -f \"backups/schedules.json.backup\" ]; then\n        mv backups/schedules.json.backup backups/schedules.json\n        echo \"📋 Schedules restored\"\n    fi\n    \n    echo \"✅ Update completed successfully\"\nfi\nEOF\n  \n  chmod +x update.sh\n  \n  printf \"\\n🎉 Installation Complete\\n\"\n  printf \"\\n🔧 Auto-Update Configuration:\\n\"\n  printf \"Repository: ${GITHUB_REPO}\\n\"\n  printf \"Branch: ${BRANCH}\\n\"\n  printf \"\\n🔐 Default Login:\\n\"\n  printf \"Username: admin\\n\"\n  printf \"Password: admin123\\n\"\n  printf \"\\n⚠️  Bitte ändere das Passwort nach dem ersten Login!\\n\"\n  printf \"\\n📝 Update-Hinweise:\\n\"\n  printf \"- Bei jedem Neustart wird automatisch nach Updates gesucht\\n\"\n  printf \"- Deine config.json und Zeitpläne bleiben erhalten\\n\"\n  printf \"- Manueller Update: ./update.sh\\n\"\n  printf \"- Über Web-Interface: System-Tab -> Manuelles Update\\n\"\n  \n  # Final verification\n  echo \"\\n=== FINAL VERIFICATION ===\"\n  echo \"Node.js: $(node --version)\"\n  echo \"NPM: $(npm --version)\"\n  echo \"Git: $(git --version)\"\n  echo \"mysqldump: $(which mysqldump || echo 'NOT FOUND')\"\n  echo \"pg_dump: $(which pg_dump || echo 'NOT FOUND')\"\n  echo \"mongodump: $(which mongodump || echo 'NOT FOUND')\"\n  echo \"Git Repository: $(git remote get-url origin || echo 'NOT FOUND')\"\n  echo \"Current Branch: $(git branch --show-current || echo 'NOT FOUND')\"\n  echo \"=========================\"\n}\n\nmain \"@\"",
       "container": "debian:bookworm-slim",
       "entrypoint": "bash"
     }
   },
   "variables": [
+    {
+      "name": "GitHub Repository",
+      "description": "GitHub Repository URL (z.B. https://github.com/username/repo.git)",
+      "env_variable": "GITHUB_REPOSITORY",
+      "default_value": "https://github.com/DEIN-USERNAME/db-backup-tool.git",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|min:10",
+      "sort": 1,
+      "field_type": "text"
+    },
+    {
+      "name": "GitHub Branch",
+      "description": "Branch für Updates (normalerweise main oder master)",
+      "env_variable": "GITHUB_BRANCH",
+      "default_value": "main",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|min:1",
+      "sort": 2,
+      "field_type": "text"
+    },
+    {
+      "name": "Auto-Update aktivieren",
+      "description": "Automatische Updates bei Serverstart",
+      "env_variable": "AUTO_UPDATE",
+      "default_value": "true",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
+      "sort": 3,
+      "field_type": "text"
+    },
     {
       "name": "Node Environment",
       "description": "Node.js Umgebung (production oder development)",
@@ -37,7 +70,7 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:production,development",
-      "sort": 1,
+      "sort": 4,
       "field_type": "text"
     },
     {
@@ -48,7 +81,7 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|min:3|max:20",
-      "sort": 2,
+      "sort": 5,
       "field_type": "text"
     },
     {
@@ -59,7 +92,7 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|min:6",
-      "sort": 3,
+      "sort": 6,
       "field_type": "text"
     },
     {
@@ -70,7 +103,7 @@
       "user_viewable": false,
       "user_editable": true,
       "rules": "required|string|min:32",
-      "sort": 4,
+      "sort": 7,
       "field_type": "text"
     },
     {
@@ -81,7 +114,7 @@
       "user_viewable": false,
       "user_editable": true,
       "rules": "required|string|min:32",
-      "sort": 5,
+      "sort": 8,
       "field_type": "text"
     },
     {
@@ -92,7 +125,7 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|min:1|max:100",
-      "sort": 6,
+      "sort": 9,
       "field_type": "text"
     },
     {
@@ -103,7 +136,7 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 7,
+      "sort": 10,
       "field_type": "text"
     }
   ]
