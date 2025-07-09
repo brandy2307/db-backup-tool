@@ -1,0 +1,1009 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const cron = require('node-cron');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const session = require('express-session');
+const helmet = require('helmet');
+const compression = require('compression');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const mysqldump = require('mysqldump');
+
+
+class DatabaseBackupTool {
+    constructor() {
+        this.app = express();
+        this.config = this.loadConfig();
+        this.users = new Map();
+        this.backupJobs = new Map();
+        this.init();
+    }
+
+    loadConfig() {
+        try {
+            const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+            
+            // Umgebungsvariablen überschreiben Konfiguration
+            if (process.env.ADMIN_USERNAME) {
+                config.security.defaultAdmin.username = process.env.ADMIN_USERNAME;
+            }
+            if (process.env.ADMIN_PASSWORD) {
+                config.security.defaultAdmin.password = process.env.ADMIN_PASSWORD;
+            }
+            if (process.env.SESSION_SECRET) {
+                config.security.sessionSecret = process.env.SESSION_SECRET;
+            }
+            if (process.env.JWT_SECRET) {
+                config.security.jwtSecret = process.env.JWT_SECRET;
+            }
+            if (process.env.MAX_BACKUPS) {
+                config.backup.maxBackups = parseInt(process.env.MAX_BACKUPS);
+            }
+            if (process.env.ENABLE_COMPRESSION) {
+                config.backup.compression = process.env.ENABLE_COMPRESSION === 'true';
+            }
+            
+            return config;
+        } catch (error) {
+            console.error('Fehler beim Laden der Konfiguration:', error);
+            process.exit(1);
+        }
+    }
+
+    init() {
+        this.setupMiddleware();
+        this.setupRoutes();
+        this.setupDefaultUser();
+        this.ensureDirectories();
+        this.startServer();
+    }
+
+    setupMiddleware() {
+        // Middleware für HTTP-erzwingung
+        this.app.use((req, res, next) => {
+            // HTTPS-Redirects verhindern
+            res.setHeader('Strict-Transport-Security', 'max-age=0');
+            res.removeHeader('Cross-Origin-Opener-Policy');
+            res.removeHeader('Cross-Origin-Embedder-Policy');
+            next();
+        });
+
+        // Sicherheits-Middleware ohne strikte CSP
+        this.app.use(helmet({
+            contentSecurityPolicy: false,
+            crossOriginEmbedderPolicy: false,
+            crossOriginOpenerPolicy: false,
+            hsts: false
+        }));
+        this.app.use(compression());
+        this.app.use(cors({
+            origin: true,
+            credentials: true
+        }));
+        
+        // Rate limiting
+        const limiter = rateLimit({
+            windowMs: 15 * 60 * 1000, // 15 Minuten
+            max: 100,
+            message: 'Zu viele Anfragen von dieser IP'
+        });
+        this.app.use('/api/', limiter);
+
+        // Body parsing
+        this.app.use(express.json());
+        this.app.use(express.urlencoded({ extended: true }));
+
+        // Session management
+        this.app.use(session({
+            secret: this.config.security.sessionSecret,
+            resave: false,
+            saveUninitialized: false,
+            cookie: { 
+                secure: false, 
+                maxAge: 24 * 60 * 60 * 1000,
+                sameSite: 'lax'
+            }
+        }));
+
+        // Statische Dateien
+        this.app.use(express.static('public'));
+    }
+setupRoutes() {
+        // Auth Middleware
+        const authMiddleware = (req, res, next) => {
+            const token = req.headers.authorization?.split(' ')[1] || req.session.token;
+            
+            if (!token) {
+                return res.status(401).json({ error: 'Kein Token bereitgestellt' });
+            }
+
+            try {
+                const decoded = jwt.verify(token, this.config.security.jwtSecret);
+                req.user = decoded;
+                next();
+            } catch (error) {
+                return res.status(401).json({ error: 'Ungültiger Token' });
+            }
+        };
+
+        // Login Route
+        this.app.post('/api/login', async (req, res) => {
+            const { username, password } = req.body;
+            
+            if (!username || !password) {
+                return res.status(400).json({ error: 'Benutzername und Passwort erforderlich' });
+            }
+
+            const user = this.users.get(username);
+            if (!user || !await bcrypt.compare(password, user.password)) {
+                return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+            }
+
+            const token = jwt.sign(
+                { username: user.username, role: user.role },
+                this.config.security.jwtSecret,
+                { expiresIn: '24h' }
+            );
+
+            req.session.token = token;
+            res.json({ token, username: user.username, role: user.role });
+        });
+
+        // Logout Route
+        this.app.post('/api/logout', (req, res) => {
+            req.session.destroy();
+            res.json({ message: 'Erfolgreich abgemeldet' });
+        });
+
+        // Geschützte Routen
+        this.app.get('/api/backups', authMiddleware, (req, res) => {
+            this.getBackups(req, res);
+        });
+
+        this.app.post('/api/backup', authMiddleware, (req, res) => {
+            this.createBackup(req, res);
+        });
+
+        this.app.delete('/api/backup/:filename', authMiddleware, (req, res) => {
+            this.deleteBackup(req, res);
+        });
+
+        this.app.get('/api/backup/:filename/download', authMiddleware, (req, res) => {
+            this.downloadBackup(req, res);
+        });
+
+        this.app.post('/api/schedule', authMiddleware, (req, res) => {
+            this.scheduleBackup(req, res);
+        });
+
+        this.app.get('/api/schedules', authMiddleware, (req, res) => {
+            this.getSchedules(req, res);
+        });
+
+        this.app.delete('/api/schedule/:id', authMiddleware, (req, res) => {
+            this.deleteSchedule(req, res);
+        });
+
+        // Hauptseite
+        this.app.get('/', (req, res) => {
+            res.send(this.getMainPage());
+        });
+
+        // 404 Handler
+        this.app.use((req, res) => {
+            res.status(404).json({ error: 'Endpunkt nicht gefunden' });
+        });
+    }
+
+    async setupDefaultUser() {
+        const hashedPassword = await bcrypt.hash(this.config.security.defaultAdmin.password, 10);
+        this.users.set(this.config.security.defaultAdmin.username, {
+            username: this.config.security.defaultAdmin.username,
+            password: hashedPassword,
+            role: 'admin'
+        });
+    }
+
+    ensureDirectories() {
+        const dirs = ['backups', 'logs', 'config'];
+        dirs.forEach(dir => {
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+        });
+    }
+
+    async getBackups(req, res) {
+        try {
+            const backupDir = this.config.backup.defaultPath;
+            const files = fs.readdirSync(backupDir);
+            
+            const backups = files.map(file => {
+                const filePath = path.join(backupDir, file);
+                const stats = fs.statSync(filePath);
+                return {
+                    filename: file,
+                    size: stats.size,
+                    created: stats.birthtime,
+                    modified: stats.mtime
+                };
+            }).sort((a, b) => b.created - a.created);
+
+            res.json(backups);
+        } catch (error) {
+            res.status(500).json({ error: 'Fehler beim Laden der Backups: ' + error.message });
+        }
+    }
+
+    async createBackup(req, res) {
+    const { type, host, port, database, username, password, options = {} } = req.body;
+
+    if (!type || !host || !database || !username || !password) {
+        return res.status(400).json({ error: 'Alle Datenbankverbindungsparameter sind erforderlich' });
+    }
+
+    const safeDatabaseName = (database || 'unknown_db').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = safeDatabaseName + '_' + timestamp + '.sql';
+    const backupPath = path.join(this.config.backup.defaultPath, filename);
+
+    try {
+        switch (type) {
+            case 'mysql':
+                const mysqldump = require('mysqldump');
+
+                await mysqldump({
+                    connection: {
+                        host: host,
+                        port: parseInt(port) || 3306,
+                        user: username,
+                        password: password,
+                        database: database
+                    },
+                    dumpToFile: backupPath
+                });
+
+                // Komprimierung wenn aktiviert
+                if (this.config.backup.compression) {
+                    const compressedPath = backupPath + '.gz';
+                    exec('/bin/gzip ' + backupPath, (compressError) => {
+                        if (compressError) {
+                            console.error('Komprimierung fehlgeschlagen:', compressError);
+                        }
+                    });
+                }
+
+                // Alte Backups aufräumen
+                this.cleanupOldBackups();
+
+                return res.json({
+                    message: 'Backup erfolgreich erstellt',
+                    filename: path.basename(backupPath),
+                    path: backupPath
+                });
+
+            case 'postgresql':
+                const pgCommand = 'PGPASSWORD=' + password +
+                    ' pg_dump -h ' + host +
+                    ' -p ' + (port || 5432) +
+                    ' -U ' + username +
+                    ' -d ' + database +
+                    ' > ' + backupPath;
+
+                exec(pgCommand, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error('Backup Fehler:', error);
+                        console.error('stderr:', stderr);
+                        return res.status(500).json({ error: 'Backup fehlgeschlagen: ' + error.message });
+                    }
+
+                    if (this.config.backup.compression) {
+                        exec('/bin/gzip ' + backupPath, (compressError) => {
+                            if (compressError) {
+                                console.error('Komprimierung fehlgeschlagen:', compressError);
+                            }
+                        });
+                    }
+
+                    this.cleanupOldBackups();
+
+                    res.json({
+                        message: 'Backup erfolgreich erstellt',
+                        filename: filename,
+                        path: backupPath
+                    });
+                });
+                break;
+
+            case 'mongodb':
+                const mongoBackupDir = path.join(this.config.backup.defaultPath, database + '_' + timestamp);
+                const mongoCommand = 'mongodump --host ' + host + ':' + (port || 27017) +
+                    ' --db ' + database +
+                    ' --username ' + username +
+                    ' --password ' + password +
+                    ' --out ' + mongoBackupDir;
+
+                exec(mongoCommand, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error('Backup Fehler:', error);
+                        console.error('stderr:', stderr);
+                        return res.status(500).json({ error: 'Backup fehlgeschlagen: ' + error.message });
+                    }
+
+                    // Kompression nicht erforderlich – MongoDB speichert als Verzeichnis
+                    this.cleanupOldBackups();
+
+                    res.json({
+                        message: 'Backup erfolgreich erstellt',
+                        filename: path.basename(mongoBackupDir),
+                        path: mongoBackupDir
+                    });
+                });
+                break;
+
+            default:
+                return res.status(400).json({ error: 'Nicht unterstützter Datenbanktyp' });
+        }
+    } catch (error) {
+        console.error('Fehler beim Erstellen des Backups:', error);
+        res.status(500).json({ error: 'Fehler beim Erstellen des Backups: ' + error.message });
+    }
+}
+
+
+    async deleteBackup(req, res) {
+        const { filename } = req.params;
+        const backupPath = path.join(this.config.backup.defaultPath, filename);
+        
+        try {
+            if (fs.existsSync(backupPath)) {
+                fs.unlinkSync(backupPath);
+                res.json({ message: 'Backup erfolgreich gelöscht' });
+            } else {
+                res.status(404).json({ error: 'Backup nicht gefunden' });
+            }
+        } catch (error) {
+            res.status(500).json({ error: 'Fehler beim Löschen des Backups: ' + error.message });
+        }
+    }
+
+    async downloadBackup(req, res) {
+        const { filename } = req.params;
+        const backupPath = path.join(this.config.backup.defaultPath, filename);
+        
+        try {
+            if (fs.existsSync(backupPath)) {
+                res.download(backupPath, filename);
+            } else {
+                res.status(404).json({ error: 'Backup nicht gefunden' });
+            }
+        } catch (error) {
+            res.status(500).json({ error: 'Fehler beim Download: ' + error.message });
+        }
+    }
+
+    async scheduleBackup(req, res) {
+    const { name, cronExpression, dbConfig } = req.body;
+
+    if (!name || !cronExpression || !dbConfig || !dbConfig.database) {
+        return res.status(400).json({ error: 'Name, Cron-Expression und gültige Datenbank-Konfiguration erforderlich' });
+    }
+
+    try {
+        const jobId = Date.now().toString();
+
+        const job = require('node-cron').schedule(cronExpression, async () => {
+            try {
+                await this.createBackup(
+                    { body: dbConfig },
+                    {
+                        status: () => ({
+                            json: (msg) => console.log('[Zeitplan Fehler]', msg)
+                        }),
+                        json: (msg) => console.log('[Zeitplan Erfolg]', msg)
+                    }
+                );
+            } catch (err) {
+                console.error('[Zeitplan Crash]', err);
+            }
+        }, { scheduled: false });
+
+        this.backupJobs.set(jobId, {
+            id: jobId,
+            name,
+            cronExpression,
+            dbConfig,
+            job,
+            created: new Date()
+        });
+
+        job.start();
+
+        res.json({
+            message: 'Backup-Zeitplan erfolgreich erstellt',
+            jobId
+        });
+    } catch (error) {
+        console.error('Fehler beim Erstellen des Zeitplans:', error);
+        res.status(500).json({ error: 'Fehler beim Erstellen des Zeitplans: ' + error.message });
+    }
+}
+
+
+    async getSchedules(req, res) {
+        const schedules = Array.from(this.backupJobs.values()).map(job => ({
+            id: job.id,
+            name: job.name,
+            cronExpression: job.cronExpression,
+            dbConfig: { ...job.dbConfig, password: '***' }, // Passwort verstecken
+            created: job.created
+        }));
+
+        res.json(schedules);
+    }
+
+    async deleteSchedule(req, res) {
+        const { id } = req.params;
+        
+        if (this.backupJobs.has(id)) {
+            const job = this.backupJobs.get(id);
+            job.job.stop();
+            job.job.destroy();
+            this.backupJobs.delete(id);
+            res.json({ message: 'Zeitplan erfolgreich gelöscht' });
+        } else {
+            res.status(404).json({ error: 'Zeitplan nicht gefunden' });
+        }
+    }
+
+    cleanupOldBackups() {
+        try {
+            const backupDir = this.config.backup.defaultPath;
+            const files = fs.readdirSync(backupDir);
+            
+            if (files.length > this.config.backup.maxBackups) {
+                const backups = files.map(file => {
+                    const filePath = path.join(backupDir, file);
+                    const stats = fs.statSync(filePath);
+                    return { file, path: filePath, created: stats.birthtime };
+                }).sort((a, b) => a.created - b.created);
+
+                const filesToDelete = backups.slice(0, files.length - this.config.backup.maxBackups);
+                
+                filesToDelete.forEach(backup => {
+                    fs.unlinkSync(backup.path);
+                    console.log('Altes Backup gelöscht: ' + backup.file);
+                });
+            }
+        } catch (error) {
+            console.error('Fehler beim Aufräumen alter Backups:', error);
+        }
+    }
+    getMainPage() {
+        return `<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Backup Tool</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: #2c3e50; color: white; padding: 20px; text-align: center; }
+        .login-form { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; margin: 50px auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #3498db; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; width: 100%; }
+        button:hover { background: #2980b9; }
+        .main-content { display: none; }
+        .tabs { display: flex; background: white; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+        .tab { flex: 1; padding: 15px; background: #ecf0f1; border: none; cursor: pointer; }
+        .tab.active { background: #3498db; color: white; }
+        .tab-content { display: none; background: white; padding: 20px; border-radius: 8px; }
+        .tab-content.active { display: block; }
+        .backup-form { display: grid; gap: 15px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .backup-list { margin-top: 20px; }
+        .backup-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; }
+        .error { color: red; margin-top: 10px; }
+        .success { color: green; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Database Backup Tool</h1>
+        <p>Automatisierte Datenbank-Backups für MySQL, PostgreSQL und MongoDB</p>
+    </div>
+
+    <div class="container">
+        <div id="login-section">
+            <div class="login-form">
+                <h2>Anmeldung</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">Benutzername:</label>
+                        <input type="text" id="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Passwort:</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <button type="submit">Anmelden</button>
+                </form>
+                <div id="loginError" class="error"></div>
+            </div>
+        </div>
+
+        <div id="main-content" class="main-content">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('backup')">Backup erstellen</button>
+                <button class="tab" onclick="showTab('backups')">Backups verwalten</button>
+                <button class="tab" onclick="showTab('schedule')">Zeitplan</button>
+            </div>
+
+            <div id="backup-content" class="tab-content active">
+                <h2>Neues Backup erstellen</h2>
+                <form id="backupForm" class="backup-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dbType">Datenbanktyp:</label>
+                            <select id="dbType" required>
+                                <option value="">Wähle Typ...</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="postgresql">PostgreSQL</option>
+                                <option value="mongodb">MongoDB</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dbHost">Host:</label>
+                            <input type="text" id="dbHost" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dbPort">Port:</label>
+                            <input type="number" id="dbPort">
+                        </div>
+                        <div class="form-group">
+                            <label for="dbName">Datenbankname:</label>
+                            <input type="text" id="dbName" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dbUsername">Benutzername:</label>
+                            <input type="text" id="dbUsername" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="dbPassword">Passwort:</label>
+                            <input type="password" id="dbPassword" required>
+                        </div>
+                    </div>
+                    <button type="submit">Backup erstellen</button>
+                </form>
+                <div id="backupResult"></div>
+            </div>
+
+            <div id="backups-content" class="tab-content">
+                <h2>Backup-Verwaltung</h2>
+                <button onclick="loadBackups()">Aktualisieren</button>
+                <div id="backupsList" class="backup-list"></div>
+            </div>
+
+            <div id="schedule-content" class="tab-content">
+                <h2>Backup-Zeitpläne</h2>
+                <form id="scheduleForm" class="backup-form">
+                    <div class="form-group">
+                        <label for="scheduleName">Name:</label>
+                        <input type="text" id="scheduleName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cronExpression">Cron-Expression:</label>
+                        <input type="text" id="cronExpression" placeholder="0 2 * * *" required>
+                        <small>Beispiel: "0 2 * * *" = täglich um 2:00 Uhr</small>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="scheduleDbType">Datenbanktyp:</label>
+                            <select id="scheduleDbType" required>
+                                <option value="">Wähle Typ...</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="postgresql">PostgreSQL</option>
+                                <option value="mongodb">MongoDB</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleDbHost">Host:</label>
+                            <input type="text" id="scheduleDbHost" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="scheduleDbPort">Port:</label>
+                            <input type="number" id="scheduleDbPort">
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleDbName">Datenbankname:</label>
+                            <input type="text" id="scheduleDbName" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="scheduleDbUsername">Benutzername:</label>
+                            <input type="text" id="scheduleDbUsername" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleDbPassword">Passwort:</label>
+                            <input type="password" id="scheduleDbPassword" required>
+                        </div>
+                    </div>
+                    <button type="submit">Zeitplan erstellen</button>
+                </form>
+                <div id="scheduleResult"></div>
+                <div id="schedulesList" class="backup-list"></div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button onclick="logout()">Abmelden</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('JavaScript wird geladen...');
+        
+        let authToken = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM geladen, initialisiere Event Listener...');
+            
+            const loginForm = document.getElementById('loginForm');
+            if (loginForm) {
+                console.log('Login Form gefunden, füge Event Listener hinzu...');
+                loginForm.addEventListener('submit', handleLogin);
+            } else {
+                console.error('Login Form nicht gefunden!');
+            }
+
+            const backupForm = document.getElementById('backupForm');
+            if (backupForm) {
+                backupForm.addEventListener('submit', handleBackupSubmit);
+            }
+
+            const scheduleForm = document.getElementById('scheduleForm');
+            if (scheduleForm) {
+                scheduleForm.addEventListener('submit', handleScheduleSubmit);
+            }
+
+            const dbType = document.getElementById('dbType');
+            if (dbType) {
+                dbType.addEventListener('change', handleDbTypeChange);
+            }
+
+            const scheduleDbType = document.getElementById('scheduleDbType');
+            if (scheduleDbType) {
+                scheduleDbType.addEventListener('change', handleScheduleDbTypeChange);
+            }
+        });
+
+        async function handleLogin(e) {
+            console.log('Login Form submitted!');
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            console.log('Login attempt for user:', username);
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                console.log('Login response status:', response.status);
+                const data = await response.json();
+                console.log('Login response data:', data);
+
+                if (response.ok) {
+                    authToken = data.token;
+                    console.log('Login successful, token received');
+                    document.getElementById('login-section').style.display = 'none';
+                    document.getElementById('main-content').style.display = 'block';
+                    loadBackups();
+                    loadSchedules();
+                } else {
+                    console.error('Login failed:', data.error);
+                    document.getElementById('loginError').textContent = data.error;
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                document.getElementById('loginError').textContent = 'Verbindungsfehler: ' + error.message;
+            }
+        }
+
+        async function handleBackupSubmit(e) {
+            e.preventDefault();
+            
+            const backupData = {
+                type: document.getElementById('dbType').value,
+                host: document.getElementById('dbHost').value,
+                port: document.getElementById('dbPort').value,
+                database: document.getElementById('dbName').value,
+                username: document.getElementById('dbUsername').value,
+                password: document.getElementById('dbPassword').value
+            };
+
+            try {
+                const response = await fetch('/api/backup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + authToken
+                    },
+                    body: JSON.stringify(backupData)
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('backupResult');
+
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="success">' + data.message + '</div>';
+                    loadBackups();
+                } else {
+                    resultDiv.innerHTML = '<div class="error">' + data.error + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('backupResult').innerHTML = '<div class="error">Verbindungsfehler</div>';
+            }
+        }
+
+        async function handleScheduleSubmit(e) {
+            e.preventDefault();
+            
+            const scheduleData = {
+                name: document.getElementById('scheduleName').value,
+                cronExpression: document.getElementById('cronExpression').value,
+                dbConfig: {
+                    type: document.getElementById('scheduleDbType').value,
+                    host: document.getElementById('scheduleDbHost').value,
+                    port: document.getElementById('scheduleDbPort').value,
+                    database: document.getElementById('scheduleDbName').value,
+                    username: document.getElementById('scheduleDbUsername').value,
+                    password: document.getElementById('scheduleDbPassword').value
+                }
+            };
+
+            try {
+                const response = await fetch('/api/schedule', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + authToken
+                    },
+                    body: JSON.stringify(scheduleData)
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('scheduleResult');
+
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="success">' + data.message + '</div>';
+                    loadSchedules();
+                    document.getElementById('scheduleForm').reset();
+                } else {
+                    resultDiv.innerHTML = '<div class="error">' + data.error + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('scheduleResult').innerHTML = '<div class="error">Verbindungsfehler</div>';
+            }
+        }
+
+        function handleDbTypeChange(e) {
+            const portField = document.getElementById('dbPort');
+            switch(e.target.value) {
+                case 'mysql':
+                    portField.value = '3306';
+                    break;
+                case 'postgresql':
+                    portField.value = '5432';
+                    break;
+                case 'mongodb':
+                    portField.value = '27017';
+                    break;
+                default:
+                    portField.value = '';
+            }
+        }
+
+        function handleScheduleDbTypeChange(e) {
+            const portField = document.getElementById('scheduleDbPort');
+            switch(e.target.value) {
+                case 'mysql':
+                    portField.value = '3306';
+                    break;
+                case 'postgresql':
+                    portField.value = '5432';
+                    break;
+                case 'mongodb':
+                    portField.value = '27017';
+                    break;
+                default:
+                    portField.value = '';
+            }
+        }
+
+        async function loadBackups() {
+            try {
+                const response = await fetch('/api/backups', {
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+
+                const backups = await response.json();
+                const backupsList = document.getElementById('backupsList');
+
+                if (response.ok) {
+                    backupsList.innerHTML = backups.map(backup => 
+                        '<div class="backup-item">' +
+                            '<div>' +
+                                '<strong>' + backup.filename + '</strong><br>' +
+                                '<small>Erstellt: ' + new Date(backup.created).toLocaleString('de-DE') + '</small><br>' +
+                                '<small>Größe: ' + (backup.size / 1024 / 1024).toFixed(2) + ' MB</small>' +
+                            '</div>' +
+                            '<div>' +
+                                '<button onclick="downloadBackup(\\\'' + backup.filename + '\\\')" >Download</button>' +
+                                '<button onclick="deleteBackup(\\\'' + backup.filename + '\\\')" style="background: #e74c3c;">Löschen</button>' +
+                            '</div>' +
+                        '</div>'
+                    ).join('');
+                } else {
+                    backupsList.innerHTML = '<div class="error">' + backups.error + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('backupsList').innerHTML = '<div class="error">Fehler beim Laden der Backups</div>';
+            }
+        }
+
+        async function loadSchedules() {
+            try {
+                const response = await fetch('/api/schedules', {
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+
+                const schedules = await response.json();
+                const schedulesList = document.getElementById('schedulesList');
+
+                if (response.ok) {
+                    schedulesList.innerHTML = '<h3>Aktive Zeitpläne:</h3>' + schedules.map(schedule => 
+                        '<div class="backup-item">' +
+                            '<div>' +
+                                '<strong>' + schedule.name + '</strong><br>' +
+                                '<small>Cron: ' + schedule.cronExpression + '</small><br>' +
+                                '<small>Datenbank: ' + schedule.dbConfig.type + ' - ' + schedule.dbConfig.database + '</small><br>' +
+                                '<small>Erstellt: ' + new Date(schedule.created).toLocaleString('de-DE') + '</small>' +
+                            '</div>' +
+                            '<div>' +
+                                '<button onclick="deleteSchedule(\\\'' + schedule.id + '\\\')" style="background: #e74c3c;">Löschen</button>' +
+                            '</div>' +
+                        '</div>'
+                    ).join('');
+                } else {
+                    schedulesList.innerHTML = '<div class="error">' + schedules.error + '</div>';
+                }
+            } catch (error) {
+                document.getElementById('schedulesList').innerHTML = '<div class="error">Fehler beim Laden der Zeitpläne</div>';
+            }
+        }
+
+        function downloadBackup(filename) {
+            window.open('/api/backup/' + filename + '/download?token=' + authToken, '_blank');
+        }
+
+        async function deleteBackup(filename) {
+            if (confirm('Backup ' + filename + ' wirklich löschen?')) {
+                try {
+                    const response = await fetch('/api/backup/' + filename, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + authToken }
+                    });
+
+                    if (response.ok) {
+                        loadBackups();
+                    } else {
+                        const data = await response.json();
+                        alert('Fehler: ' + data.error);
+                    }
+                } catch (error) {
+                    alert('Verbindungsfehler');
+                }
+            }
+        }
+
+        async function deleteSchedule(scheduleId) {
+            if (confirm('Zeitplan wirklich löschen?')) {
+                try {
+                    const response = await fetch('/api/schedule/' + scheduleId, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + authToken }
+                    });
+
+                    if (response.ok) {
+                        loadSchedules();
+                    } else {
+                        const data = await response.json();
+                        alert('Fehler: ' + data.error);
+                    }
+                } catch (error) {
+                    alert('Verbindungsfehler');
+                }
+            }
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.getElementById(tabName + '-content').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function logout() {
+            authToken = null;
+            document.getElementById('login-section').style.display = 'block';
+            document.getElementById('main-content').style.display = 'none';
+            document.getElementById('loginForm').reset();
+            document.getElementById('loginError').textContent = '';
+        }
+
+        console.log('JavaScript vollständig geladen');
+        
+        setTimeout(() => {
+            console.log('Login Form Element:', document.getElementById('loginForm'));
+            console.log('Username Field:', document.getElementById('username'));
+            console.log('Password Field:', document.getElementById('password'));
+        }, 1000);
+    </script>
+</body>
+</html>`;
+    }
+
+    startServer() {
+        const port = this.config.server.port;
+        const host = this.config.server.host;
+        
+        this.app.listen(port, host, () => {
+            console.log('');
+            console.log('🚀 Database Backup Tool gestartet!');
+            console.log('📡 Server läuft auf ' + host + ':' + port);
+            console.log('🔐 Standard Login: ' + this.config.security.defaultAdmin.username + ' / ' + this.config.security.defaultAdmin.password);
+            console.log('📁 Backup-Verzeichnis: ' + this.config.backup.defaultPath);
+            console.log('');
+            console.log('⚠️  WICHTIG: Ändere die Standard-Passwörter nach dem ersten Login!');
+        });
+    }
+}
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM empfangen, beende Anwendung...');
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT empfangen, beende Anwendung...');
+    process.exit(0);
+});
+
+// Start the application
+new DatabaseBackupTool();

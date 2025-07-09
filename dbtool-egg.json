@@ -1,0 +1,110 @@
+{
+  "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2024-06-02T14:40:56+00:00",
+  "name": "DB Backup Tool",
+  "author": "admin@example.com",
+  "uuid": "db9f372e-01d7-4c9b-a109-e49990d68d46",
+  "description": "Automatisches Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreSQL und MongoDB.",
+  "features": null,
+  "docker_images": {
+    "ghcr.io/parkervcp/yolks:nodejs_18": "ghcr.io/parkervcp/yolks:nodejs_18"
+  },
+  "file_denylist": [],
+  "startup": "cd ~/db-backup-tool && npm start",
+  "config": {
+    "files": "{\r\n    \"config.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"server.port\": \"{{server.build.default.port}}\",\r\n            \"server.host\": \"0.0.0.0\"\r\n        }\r\n    }\r\n}",
+    "startup": "{\r\n    \"done\": \"Server läuft auf Port\"\r\n}",
+    "logs": "{}",
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\n# DB Backup Tool Installation Script\n#\n# Server Files: /mnt/server\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\ndie() {\n  local message=\"$1\"\n  printf \"\\n%s\\n\" \"${message}\"\n  exit 2\n}\n\ncd_error() {\n  die \"ERROR: Installation encountered an error while trying to change directory\"\n}\n\nmain() {\n  echo \"Starting installation...\"\n  \n  # Update package list\n  apt update\n  \n  # Install basic dependencies\n  apt install -y wget curl gnupg2 software-properties-common\n  \n  # Install Node.js 18.x\n  curl -fsSL https://deb.nodesource.com/setup_18.x | bash -\n  apt install -y nodejs\n  \n  # Install database clients with error handling\n  echo \"Installing database clients...\"\n  apt install -y mysql-client || apt install -y default-mysql-client\n  apt install -y postgresql-client || apt install -y postgresql-client-common\n  \n  # Install MongoDB tools\n  echo \"Installing MongoDB tools...\"\n  curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg\n  echo \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main\" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list\n  apt update\n  apt install -y mongodb-database-tools || echo \"MongoDB tools installation failed, continuing...\"\n  \n  # Verify installations\n  echo \"Verifying installations...\"\n  which mysqldump && echo \"mysqldump: OK\" || echo \"mysqldump: FAILED\"\n  which pg_dump && echo \"pg_dump: OK\" || echo \"pg_dump: FAILED\"\n  which mongodump && echo \"mongodump: OK\" || echo \"mongodump: FAILED\"\n  \n  cd \"${DIR}\" || cd_error\n  \n  mkdir -p \"${APP_DIR}\"\n  cd \"${APP_DIR}\" || cd_error\n  \n  cat <<'EOF' > package.json\n{\n  \"name\": \"db-backup-tool\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Database Backup Tool with Web Interface\",\n  \"main\": \"server.js\",\n  \"scripts\": {\n    \"start\": \"node server.js\",\n    \"dev\": \"nodemon server.js\"\n  },\n  \"dependencies\": {\n    \"express\": \"^4.18.2\",\n    \"express-rate-limit\": \"^6.7.0\",\n    \"multer\": \"^1.4.5-lts.1\",\n    \"node-cron\": \"^3.0.2\",\n    \"bcryptjs\": \"^2.4.3\",\n    \"jsonwebtoken\": \"^9.0.0\",\n    \"express-session\": \"^1.17.3\",\n    \"helmet\": \"^6.1.5\",\n    \"compression\": \"^1.7.4\",\n    \"cors\": \"^2.8.5\"\n  },\n  \"devDependencies\": {\n    \"nodemon\": \"^2.0.22\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\nEOF\n  \n  npm install\n  \n  mkdir -p backups logs config public/css public/js\n  \n  cat <<'EOF' > config.json\n{\n  \"server\": {\n    \"port\": 8080,\n    \"host\": \"0.0.0.0\"\n  },\n  \"security\": {\n    \"sessionSecret\": \"change-this-secret-key-in-production\",\n    \"jwtSecret\": \"change-this-jwt-secret-in-production\",\n    \"defaultAdmin\": {\n      \"username\": \"admin\",\n      \"password\": \"admin123\"\n    }\n  },\n  \"backup\": {\n    \"defaultPath\": \"./backups\",\n    \"maxBackups\": 10,\n    \"compression\": true\n  },\n  \"logging\": {\n    \"level\": \"info\",\n    \"file\": \"./logs/app.log\"\n  }\n}\nEOF\n  \n  printf \"\\nInstallation Complete\\n\"\n  printf \"\\nDefault Login:\\n\"\n  printf \"Username: admin\\n\"\n  printf \"Password: admin123\\n\"\n  printf \"\\nBitte ändere das Passwort nach dem ersten Login!\\n\"\n  \n  # Final verification\n  echo \"\\n=== FINAL VERIFICATION ===\"\n  echo \"Node.js: $(node --version)\"\n  echo \"NPM: $(npm --version)\"\n  echo \"mysqldump: $(which mysqldump || echo 'NOT FOUND')\"\n  echo \"pg_dump: $(which pg_dump || echo 'NOT FOUND')\"\n  echo \"mongodump: $(which mongodump || echo 'NOT FOUND')\"\n  echo \"=========================\"\n}\n\nmain \"@\"",
+      "container": "debian:bookworm-slim",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Node Environment",
+      "description": "Node.js Umgebung (production oder development)",
+      "env_variable": "NODE_ENV",
+      "default_value": "production",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:production,development",
+      "sort": 1,
+      "field_type": "text"
+    },
+    {
+      "name": "Default Admin Username",
+      "description": "Standard Admin Benutzername",
+      "env_variable": "ADMIN_USERNAME",
+      "default_value": "admin",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|min:3|max:20",
+      "sort": 2,
+      "field_type": "text"
+    },
+    {
+      "name": "Default Admin Password",
+      "description": "Standard Admin Passwort (bitte nach dem ersten Login ändern!)",
+      "env_variable": "ADMIN_PASSWORD",
+      "default_value": "admin123",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|min:6",
+      "sort": 3,
+      "field_type": "text"
+    },
+    {
+      "name": "Session Secret",
+      "description": "Geheimer Schlüssel für Sessions",
+      "env_variable": "SESSION_SECRET",
+      "default_value": "change-this-secret-key-in-production",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "required|string|min:32",
+      "sort": 4,
+      "field_type": "text"
+    },
+    {
+      "name": "JWT Secret",
+      "description": "Geheimer Schlüssel für JWT Tokens",
+      "env_variable": "JWT_SECRET",
+      "default_value": "change-this-jwt-secret-in-production",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "required|string|min:32",
+      "sort": 5,
+      "field_type": "text"
+    },
+    {
+      "name": "Max Backups",
+      "description": "Maximale Anzahl von Backups die gespeichert werden sollen",
+      "env_variable": "MAX_BACKUPS",
+      "default_value": "10",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:1|max:100",
+      "sort": 6,
+      "field_type": "text"
+    },
+    {
+      "name": "Enable Compression",
+      "description": "Backup-Komprimierung aktivieren",
+      "env_variable": "ENABLE_COMPRESSION",
+      "default_value": "true",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
+      "sort": 7,
+      "field_type": "text"
+    }
+  ]
+}
