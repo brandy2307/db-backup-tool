@@ -19,6 +19,7 @@ class DatabaseBackupTool {
         this.config = this.loadConfig();
         this.users = new Map();
         this.backupJobs = new Map();
+        this.schedulesFile = path.join(this.config.backup.defaultPath, 'schedules.json');
         this.init();
     }
 
@@ -58,6 +59,7 @@ class DatabaseBackupTool {
         this.setupRoutes();
         this.setupDefaultUser();
         this.ensureDirectories();
+        this.loadSchedulesFromFile();
         this.startServer();
     }
 
@@ -111,7 +113,8 @@ class DatabaseBackupTool {
         // Statische Dateien
         this.app.use(express.static('public'));
     }
-setupRoutes() {
+
+    setupRoutes() {
         // Auth Middleware
         const authMiddleware = (req, res, next) => {
             const token = req.headers.authorization?.split(' ')[1] || req.session.token;
@@ -216,10 +219,137 @@ setupRoutes() {
         });
     }
 
+    // Neue Methode: Zeitpläne in Datei speichern
+    saveSchedulesToFile() {
+        try {
+            const schedules = Array.from(this.backupJobs.values()).map(job => ({
+                id: job.id,
+                name: job.name,
+                cronExpression: job.cronExpression,
+                dbConfig: job.dbConfig,
+                created: job.created
+            }));
+
+            fs.writeFileSync(this.schedulesFile, JSON.stringify(schedules, null, 2));
+            console.log('✅ Zeitpläne in Datei gespeichert:', this.schedulesFile);
+        } catch (error) {
+            console.error('❌ Fehler beim Speichern der Zeitpläne:', error);
+        }
+    }
+
+    // Neue Methode: Zeitpläne aus Datei laden
+    loadSchedulesFromFile() {
+        try {
+            if (fs.existsSync(this.schedulesFile)) {
+                const schedulesData = fs.readFileSync(this.schedulesFile, 'utf8');
+                const schedules = JSON.parse(schedulesData);
+                
+                console.log('📋 Lade gespeicherte Zeitpläne...');
+                
+                schedules.forEach(scheduleData => {
+                    this.recreateScheduleJob(scheduleData);
+                });
+                
+                console.log(`✅ ${schedules.length} Zeitplan(e) erfolgreich geladen`);
+            } else {
+                console.log('📋 Keine gespeicherten Zeitpläne gefunden - starte mit leerer Liste');
+            }
+        } catch (error) {
+            console.error('❌ Fehler beim Laden der Zeitpläne:', error);
+        }
+    }
+
+    // Neue Methode: Zeitplan-Job aus gespeicherten Daten wiederherstellen
+    recreateScheduleJob(scheduleData) {
+        try {
+            const job = cron.schedule(scheduleData.cronExpression, async () => {
+                console.log(`🔄 Führe geplantes Backup aus: ${scheduleData.name}`);
+                try {
+                    await this.executeScheduledBackup(scheduleData.dbConfig);
+                    console.log(`✅ Geplantes Backup erfolgreich: ${scheduleData.name}`);
+                } catch (err) {
+                    console.error(`❌ Geplantes Backup fehlgeschlagen: ${scheduleData.name}`, err);
+                }
+            }, { scheduled: false });
+
+            this.backupJobs.set(scheduleData.id, {
+                id: scheduleData.id,
+                name: scheduleData.name,
+                cronExpression: scheduleData.cronExpression,
+                dbConfig: scheduleData.dbConfig,
+                job,
+                created: new Date(scheduleData.created)
+            });
+
+            job.start();
+            console.log(`🕐 Zeitplan aktiviert: ${scheduleData.name} (${scheduleData.cronExpression})`);
+        } catch (error) {
+            console.error(`❌ Fehler beim Wiederherstellen des Zeitplans: ${scheduleData.name}`, error);
+        }
+    }
+
+    // Neue Methode: Backup für geplante Aufgaben ausführen
+    async executeScheduledBackup(dbConfig) {
+        const safeDatabaseName = (dbConfig.database || 'unknown_db').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `scheduled_${safeDatabaseName}_${timestamp}.sql`;
+        const backupPath = path.join(this.config.backup.defaultPath, filename);
+
+        switch (dbConfig.type) {
+            case 'mysql':
+                await mysqldump({
+                    connection: {
+                        host: dbConfig.host,
+                        port: parseInt(dbConfig.port) || 3306,
+                        user: dbConfig.username,
+                        password: dbConfig.password,
+                        database: dbConfig.database
+                    },
+                    dumpToFile: backupPath
+                });
+                break;
+
+            case 'postgresql':
+                const pgCommand = `PGPASSWORD=${dbConfig.password} pg_dump -h ${dbConfig.host} -p ${dbConfig.port || 5432} -U ${dbConfig.username} -d ${dbConfig.database} > ${backupPath}`;
+                await this.execPromise(pgCommand);
+                break;
+
+            case 'mongodb':
+                const mongoBackupDir = path.join(this.config.backup.defaultPath, `scheduled_${safeDatabaseName}_${timestamp}`);
+                const mongoCommand = `mongodump --host ${dbConfig.host}:${dbConfig.port || 27017} --db ${dbConfig.database} --username ${dbConfig.username} --password ${dbConfig.password} --out ${mongoBackupDir}`;
+                await this.execPromise(mongoCommand);
+                break;
+        }
+
+        // Komprimierung wenn aktiviert
+        if (this.config.backup.compression && dbConfig.type !== 'mongodb') {
+            await this.execPromise(`gzip ${backupPath}`);
+        }
+
+        // Alte Backups aufräumen
+        this.cleanupOldBackups();
+    }
+
+    // Hilfsmethode: exec als Promise
+    execPromise(command) {
+        return new Promise((resolve, reject) => {
+            exec(command, (error, stdout, stderr) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(stdout);
+                }
+            });
+        });
+    }
+
     async getBackups(req, res) {
         try {
             const backupDir = this.config.backup.defaultPath;
-            const files = fs.readdirSync(backupDir);
+            const files = fs.readdirSync(backupDir).filter(file => 
+                file.endsWith('.sql') || file.endsWith('.sql.gz') || 
+                (!file.includes('.') && fs.statSync(path.join(backupDir, file)).isDirectory())
+            );
             
             const backups = files.map(file => {
                 const filePath = path.join(backupDir, file);
@@ -228,7 +358,8 @@ setupRoutes() {
                     filename: file,
                     size: stats.size,
                     created: stats.birthtime,
-                    modified: stats.mtime
+                    modified: stats.mtime,
+                    type: stats.isDirectory() ? 'directory' : 'file'
                 };
             }).sort((a, b) => b.created - a.created);
 
@@ -239,68 +370,34 @@ setupRoutes() {
     }
 
     async createBackup(req, res) {
-    const { type, host, port, database, username, password, options = {} } = req.body;
+        const { type, host, port, database, username, password, options = {} } = req.body;
 
-    if (!type || !host || !database || !username || !password) {
-        return res.status(400).json({ error: 'Alle Datenbankverbindungsparameter sind erforderlich' });
-    }
+        if (!type || !host || !database || !username || !password) {
+            return res.status(400).json({ error: 'Alle Datenbankverbindungsparameter sind erforderlich' });
+        }
 
-    const safeDatabaseName = (database || 'unknown_db').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = safeDatabaseName + '_' + timestamp + '.sql';
-    const backupPath = path.join(this.config.backup.defaultPath, filename);
+        const safeDatabaseName = (database || 'unknown_db').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = safeDatabaseName + '_' + timestamp + '.sql';
+        const backupPath = path.join(this.config.backup.defaultPath, filename);
 
-    try {
-        switch (type) {
-            case 'mysql':
-                const mysqldump = require('mysqldump');
-
-                await mysqldump({
-                    connection: {
-                        host: host,
-                        port: parseInt(port) || 3306,
-                        user: username,
-                        password: password,
-                        database: database
-                    },
-                    dumpToFile: backupPath
-                });
-
-                // Komprimierung wenn aktiviert
-                if (this.config.backup.compression) {
-                    const compressedPath = backupPath + '.gz';
-                    exec('/bin/gzip ' + backupPath, (compressError) => {
-                        if (compressError) {
-                            console.error('Komprimierung fehlgeschlagen:', compressError);
-                        }
+        try {
+            switch (type) {
+                case 'mysql':
+                    await mysqldump({
+                        connection: {
+                            host: host,
+                            port: parseInt(port) || 3306,
+                            user: username,
+                            password: password,
+                            database: database
+                        },
+                        dumpToFile: backupPath
                     });
-                }
 
-                // Alte Backups aufräumen
-                this.cleanupOldBackups();
-
-                return res.json({
-                    message: 'Backup erfolgreich erstellt',
-                    filename: path.basename(backupPath),
-                    path: backupPath
-                });
-
-            case 'postgresql':
-                const pgCommand = 'PGPASSWORD=' + password +
-                    ' pg_dump -h ' + host +
-                    ' -p ' + (port || 5432) +
-                    ' -U ' + username +
-                    ' -d ' + database +
-                    ' > ' + backupPath;
-
-                exec(pgCommand, (error, stdout, stderr) => {
-                    if (error) {
-                        console.error('Backup Fehler:', error);
-                        console.error('stderr:', stderr);
-                        return res.status(500).json({ error: 'Backup fehlgeschlagen: ' + error.message });
-                    }
-
+                    // Komprimierung wenn aktiviert
                     if (this.config.backup.compression) {
+                        const compressedPath = backupPath + '.gz';
                         exec('/bin/gzip ' + backupPath, (compressError) => {
                             if (compressError) {
                                 console.error('Komprimierung fehlgeschlagen:', compressError);
@@ -308,51 +405,82 @@ setupRoutes() {
                         });
                     }
 
+                    // Alte Backups aufräumen
                     this.cleanupOldBackups();
 
-                    res.json({
+                    return res.json({
                         message: 'Backup erfolgreich erstellt',
-                        filename: filename,
+                        filename: path.basename(backupPath),
                         path: backupPath
                     });
-                });
-                break;
 
-            case 'mongodb':
-                const mongoBackupDir = path.join(this.config.backup.defaultPath, database + '_' + timestamp);
-                const mongoCommand = 'mongodump --host ' + host + ':' + (port || 27017) +
-                    ' --db ' + database +
-                    ' --username ' + username +
-                    ' --password ' + password +
-                    ' --out ' + mongoBackupDir;
+                case 'postgresql':
+                    const pgCommand = 'PGPASSWORD=' + password +
+                        ' pg_dump -h ' + host +
+                        ' -p ' + (port || 5432) +
+                        ' -U ' + username +
+                        ' -d ' + database +
+                        ' > ' + backupPath;
 
-                exec(mongoCommand, (error, stdout, stderr) => {
-                    if (error) {
-                        console.error('Backup Fehler:', error);
-                        console.error('stderr:', stderr);
-                        return res.status(500).json({ error: 'Backup fehlgeschlagen: ' + error.message });
-                    }
+                    exec(pgCommand, (error, stdout, stderr) => {
+                        if (error) {
+                            console.error('Backup Fehler:', error);
+                            console.error('stderr:', stderr);
+                            return res.status(500).json({ error: 'Backup fehlgeschlagen: ' + error.message });
+                        }
 
-                    // Kompression nicht erforderlich – MongoDB speichert als Verzeichnis
-                    this.cleanupOldBackups();
+                        if (this.config.backup.compression) {
+                            exec('/bin/gzip ' + backupPath, (compressError) => {
+                                if (compressError) {
+                                    console.error('Komprimierung fehlgeschlagen:', compressError);
+                                }
+                            });
+                        }
 
-                    res.json({
-                        message: 'Backup erfolgreich erstellt',
-                        filename: path.basename(mongoBackupDir),
-                        path: mongoBackupDir
+                        this.cleanupOldBackups();
+
+                        res.json({
+                            message: 'Backup erfolgreich erstellt',
+                            filename: filename,
+                            path: backupPath
+                        });
                     });
-                });
-                break;
+                    break;
 
-            default:
-                return res.status(400).json({ error: 'Nicht unterstützter Datenbanktyp' });
+                case 'mongodb':
+                    const mongoBackupDir = path.join(this.config.backup.defaultPath, database + '_' + timestamp);
+                    const mongoCommand = 'mongodump --host ' + host + ':' + (port || 27017) +
+                        ' --db ' + database +
+                        ' --username ' + username +
+                        ' --password ' + password +
+                        ' --out ' + mongoBackupDir;
+
+                    exec(mongoCommand, (error, stdout, stderr) => {
+                        if (error) {
+                            console.error('Backup Fehler:', error);
+                            console.error('stderr:', stderr);
+                            return res.status(500).json({ error: 'Backup fehlgeschlagen: ' + error.message });
+                        }
+
+                        // Kompression nicht erforderlich – MongoDB speichert als Verzeichnis
+                        this.cleanupOldBackups();
+
+                        res.json({
+                            message: 'Backup erfolgreich erstellt',
+                            filename: path.basename(mongoBackupDir),
+                            path: mongoBackupDir
+                        });
+                    });
+                    break;
+
+                default:
+                    return res.status(400).json({ error: 'Nicht unterstützter Datenbanktyp' });
+            }
+        } catch (error) {
+            console.error('Fehler beim Erstellen des Backups:', error);
+            res.status(500).json({ error: 'Fehler beim Erstellen des Backups: ' + error.message });
         }
-    } catch (error) {
-        console.error('Fehler beim Erstellen des Backups:', error);
-        res.status(500).json({ error: 'Fehler beim Erstellen des Backups: ' + error.message });
     }
-}
-
 
     async deleteBackup(req, res) {
         const { filename } = req.params;
@@ -360,7 +488,12 @@ setupRoutes() {
         
         try {
             if (fs.existsSync(backupPath)) {
-                fs.unlinkSync(backupPath);
+                const stats = fs.statSync(backupPath);
+                if (stats.isDirectory()) {
+                    fs.rmSync(backupPath, { recursive: true, force: true });
+                } else {
+                    fs.unlinkSync(backupPath);
+                }
                 res.json({ message: 'Backup erfolgreich gelöscht' });
             } else {
                 res.status(404).json({ error: 'Backup nicht gefunden' });
@@ -376,6 +509,11 @@ setupRoutes() {
         
         try {
             if (fs.existsSync(backupPath)) {
+                const stats = fs.statSync(backupPath);
+                if (stats.isDirectory()) {
+                    // Für Verzeichnisse (MongoDB) könnten wir sie als ZIP komprimieren
+                    return res.status(400).json({ error: 'Download von Verzeichnissen nicht unterstützt. Bitte verwende die Kommandozeile.' });
+                }
                 res.download(backupPath, filename);
             } else {
                 res.status(404).json({ error: 'Backup nicht gefunden' });
@@ -386,52 +524,48 @@ setupRoutes() {
     }
 
     async scheduleBackup(req, res) {
-    const { name, cronExpression, dbConfig } = req.body;
+        const { name, cronExpression, dbConfig } = req.body;
 
-    if (!name || !cronExpression || !dbConfig || !dbConfig.database) {
-        return res.status(400).json({ error: 'Name, Cron-Expression und gültige Datenbank-Konfiguration erforderlich' });
+        if (!name || !cronExpression || !dbConfig || !dbConfig.database) {
+            return res.status(400).json({ error: 'Name, Cron-Expression und gültige Datenbank-Konfiguration erforderlich' });
+        }
+
+        try {
+            const jobId = Date.now().toString();
+
+            const job = cron.schedule(cronExpression, async () => {
+                console.log(`🔄 Führe geplantes Backup aus: ${name}`);
+                try {
+                    await this.executeScheduledBackup(dbConfig);
+                    console.log(`✅ Geplantes Backup erfolgreich: ${name}`);
+                } catch (err) {
+                    console.error(`❌ Geplantes Backup fehlgeschlagen: ${name}`, err);
+                }
+            }, { scheduled: false });
+
+            this.backupJobs.set(jobId, {
+                id: jobId,
+                name,
+                cronExpression,
+                dbConfig,
+                job,
+                created: new Date()
+            });
+
+            job.start();
+
+            // Zeitpläne in Datei speichern
+            this.saveSchedulesToFile();
+
+            res.json({
+                message: 'Backup-Zeitplan erfolgreich erstellt',
+                jobId
+            });
+        } catch (error) {
+            console.error('Fehler beim Erstellen des Zeitplans:', error);
+            res.status(500).json({ error: 'Fehler beim Erstellen des Zeitplans: ' + error.message });
+        }
     }
-
-    try {
-        const jobId = Date.now().toString();
-
-        const job = require('node-cron').schedule(cronExpression, async () => {
-            try {
-                await this.createBackup(
-                    { body: dbConfig },
-                    {
-                        status: () => ({
-                            json: (msg) => console.log('[Zeitplan Fehler]', msg)
-                        }),
-                        json: (msg) => console.log('[Zeitplan Erfolg]', msg)
-                    }
-                );
-            } catch (err) {
-                console.error('[Zeitplan Crash]', err);
-            }
-        }, { scheduled: false });
-
-        this.backupJobs.set(jobId, {
-            id: jobId,
-            name,
-            cronExpression,
-            dbConfig,
-            job,
-            created: new Date()
-        });
-
-        job.start();
-
-        res.json({
-            message: 'Backup-Zeitplan erfolgreich erstellt',
-            jobId
-        });
-    } catch (error) {
-        console.error('Fehler beim Erstellen des Zeitplans:', error);
-        res.status(500).json({ error: 'Fehler beim Erstellen des Zeitplans: ' + error.message });
-    }
-}
-
 
     async getSchedules(req, res) {
         const schedules = Array.from(this.backupJobs.values()).map(job => ({
@@ -453,6 +587,10 @@ setupRoutes() {
             job.job.stop();
             job.job.destroy();
             this.backupJobs.delete(id);
+            
+            // Zeitpläne in Datei speichern
+            this.saveSchedulesToFile();
+            
             res.json({ message: 'Zeitplan erfolgreich gelöscht' });
         } else {
             res.status(404).json({ error: 'Zeitplan nicht gefunden' });
@@ -462,7 +600,10 @@ setupRoutes() {
     cleanupOldBackups() {
         try {
             const backupDir = this.config.backup.defaultPath;
-            const files = fs.readdirSync(backupDir);
+            const files = fs.readdirSync(backupDir).filter(file => 
+                file.endsWith('.sql') || file.endsWith('.sql.gz') || 
+                (!file.includes('.') && fs.statSync(path.join(backupDir, file)).isDirectory())
+            );
             
             if (files.length > this.config.backup.maxBackups) {
                 const backups = files.map(file => {
@@ -474,7 +615,12 @@ setupRoutes() {
                 const filesToDelete = backups.slice(0, files.length - this.config.backup.maxBackups);
                 
                 filesToDelete.forEach(backup => {
-                    fs.unlinkSync(backup.path);
+                    const stats = fs.statSync(backup.path);
+                    if (stats.isDirectory()) {
+                        fs.rmSync(backup.path, { recursive: true, force: true });
+                    } else {
+                        fs.unlinkSync(backup.path);
+                    }
                     console.log('Altes Backup gelöscht: ' + backup.file);
                 });
             }
@@ -482,6 +628,7 @@ setupRoutes() {
             console.error('Fehler beim Aufräumen alter Backups:', error);
         }
     }
+
     getMainPage() {
         return `<!DOCTYPE html>
 <html lang="de">
@@ -512,6 +659,10 @@ setupRoutes() {
         .backup-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; }
         .error { color: red; margin-top: 10px; }
         .success { color: green; margin-top: 10px; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 10px; }
+        .status-active { background: #27ae60; }
+        .status-inactive { background: #e74c3c; }
+        .schedule-info { font-size: 0.9em; color: #666; }
     </style>
 </head>
 <body>
@@ -852,13 +1003,16 @@ setupRoutes() {
                     backupsList.innerHTML = backups.map(backup => 
                         '<div class="backup-item">' +
                             '<div>' +
-                                '<strong>' + backup.filename + '</strong><br>' +
+                                '<strong>' + backup.filename + '</strong>' +
+                                '<span class="schedule-info"> (' + backup.type + ')</span><br>' +
                                 '<small>Erstellt: ' + new Date(backup.created).toLocaleString('de-DE') + '</small><br>' +
                                 '<small>Größe: ' + (backup.size / 1024 / 1024).toFixed(2) + ' MB</small>' +
                             '</div>' +
                             '<div>' +
-                                '<button onclick="downloadBackup(\\\'' + backup.filename + '\\\')" >Download</button>' +
-                                '<button onclick="deleteBackup(\\\'' + backup.filename + '\\\')" style="background: #e74c3c;">Löschen</button>' +
+                                (backup.type === 'file' ? 
+                                    '<button onclick="downloadBackup(\\\'' + backup.filename + '\\\')" >Download</button>' : 
+                                    '<span style="color: #666; font-size: 0.9em;">Verzeichnis</span>') +
+                                '<button onclick="deleteBackup(\\\'' + backup.filename + '\\\')" style="background: #e74c3c; margin-left: 5px;">Löschen</button>' +
                             '</div>' +
                         '</div>'
                     ).join('');
@@ -880,19 +1034,25 @@ setupRoutes() {
                 const schedulesList = document.getElementById('schedulesList');
 
                 if (response.ok) {
-                    schedulesList.innerHTML = '<h3>Aktive Zeitpläne:</h3>' + schedules.map(schedule => 
-                        '<div class="backup-item">' +
-                            '<div>' +
-                                '<strong>' + schedule.name + '</strong><br>' +
-                                '<small>Cron: ' + schedule.cronExpression + '</small><br>' +
-                                '<small>Datenbank: ' + schedule.dbConfig.type + ' - ' + schedule.dbConfig.database + '</small><br>' +
-                                '<small>Erstellt: ' + new Date(schedule.created).toLocaleString('de-DE') + '</small>' +
-                            '</div>' +
-                            '<div>' +
-                                '<button onclick="deleteSchedule(\\\'' + schedule.id + '\\\')" style="background: #e74c3c;">Löschen</button>' +
-                            '</div>' +
-                        '</div>'
-                    ).join('');
+                    if (schedules.length === 0) {
+                        schedulesList.innerHTML = '<h3>Aktive Zeitpläne:</h3><p style="color: #666;">Keine Zeitpläne konfiguriert.</p>';
+                    } else {
+                        schedulesList.innerHTML = '<h3>Aktive Zeitpläne:</h3>' + schedules.map(schedule => 
+                            '<div class="backup-item">' +
+                                '<div>' +
+                                    '<span class="status-indicator status-active"></span>' +
+                                    '<strong>' + schedule.name + '</strong><br>' +
+                                    '<small>Cron: ' + schedule.cronExpression + '</small><br>' +
+                                    '<small>Datenbank: ' + schedule.dbConfig.type + ' - ' + schedule.dbConfig.database + '</small><br>' +
+                                    '<small>Host: ' + schedule.dbConfig.host + ':' + schedule.dbConfig.port + '</small><br>' +
+                                    '<small>Erstellt: ' + new Date(schedule.created).toLocaleString('de-DE') + '</small>' +
+                                '</div>' +
+                                '<div>' +
+                                    '<button onclick="deleteSchedule(\\\'' + schedule.id + '\\\')" style="background: #e74c3c;">Löschen</button>' +
+                                '</div>' +
+                            '</div>'
+                        ).join('');
+                    }
                 } else {
                     schedulesList.innerHTML = '<div class="error">' + schedules.error + '</div>';
                 }
@@ -935,6 +1095,11 @@ setupRoutes() {
 
                     if (response.ok) {
                         loadSchedules();
+                        const resultDiv = document.getElementById('scheduleResult');
+                        resultDiv.innerHTML = '<div class="success">Zeitplan erfolgreich gelöscht</div>';
+                        setTimeout(() => {
+                            resultDiv.innerHTML = '';
+                        }, 3000);
                     } else {
                         const data = await response.json();
                         alert('Fehler: ' + data.error);
@@ -988,6 +1153,7 @@ setupRoutes() {
             console.log('📡 Server läuft auf ' + host + ':' + port);
             console.log('🔐 Standard Login: ' + this.config.security.defaultAdmin.username + ' / ' + this.config.security.defaultAdmin.password);
             console.log('📁 Backup-Verzeichnis: ' + this.config.backup.defaultPath);
+            console.log('📋 Zeitplan-Datei: ' + this.schedulesFile);
             console.log('');
             console.log('⚠️  WICHTIG: Ändere die Standard-Passwörter nach dem ersten Login!');
         });
