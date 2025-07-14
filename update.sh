@@ -1,6 +1,6 @@
 #!/bin/bash
-# Auto-Update Script für offizielles Repository mit Frontend-Unterstützung und automatischer Berechtigungsreparatur
-# Dieses Script wird automatisch vom DB Backup Tool verwendet
+# Auto-Update Script für offizielles Repository - Container-optimiert
+# Funktioniert ohne rsync und andere externe Tools
 
 set -e
 
@@ -74,6 +74,43 @@ ensure_directories() {
     echo "✅ Verzeichnisstruktur überprüft"
 }
 
+# Funktion: Backup-Ordner sicher wiederherstellen (ohne rsync)
+restore_backup_folder() {
+    local source_dir="$1"
+    local target_dir="$2"
+    
+    if [ ! -d "$source_dir" ]; then
+        return 0
+    fi
+    
+    echo "🔄 Stelle Backup-Ordner wieder her (von $source_dir nach $target_dir)..."
+    
+    # Stelle sicher, dass das Zielverzeichnis existiert
+    mkdir -p "$target_dir"
+    
+    # Kopiere alle Dateien und Unterverzeichnisse
+    (
+        cd "$source_dir"
+        find . -type f -exec cp --parents {} "../$target_dir/" \; 2>/dev/null || {
+            # Fallback für Systeme ohne --parents Flag
+            find . -type f | while IFS= read -r file; do
+                # Erstelle Verzeichnisstruktur
+                mkdir -p "../$target_dir/$(dirname "$file")" 2>/dev/null || true
+                # Kopiere Datei
+                cp "$file" "../$target_dir/$file" 2>/dev/null || true
+            done
+        }
+    )
+    
+    # Kopiere Verzeichnisse
+    (
+        cd "$source_dir"
+        find . -type d -exec mkdir -p "../$target_dir/{}" \; 2>/dev/null || true
+    )
+    
+    echo "✅ Backup-Ordner wiederhergestellt"
+}
+
 # Berechtigungen am Anfang setzen (falls das Script selbst keine Rechte hatte)
 echo "🔧 Erste Berechtigungsreparatur..."
 chmod +x "$0" 2>/dev/null || true
@@ -111,9 +148,9 @@ if [ -f "backups/schedules.json" ]; then
     echo "✅ schedules.json gesichert"
 fi
 
-# Backup des kompletten backups-Ordners (falls vorhanden)
-if [ -d "backups" ] && [ "$(ls -A backups)" ]; then
-    cp -r backups "$BACKUP_DIR/backups_folder"
+# Backup des kompletten backups-Ordners (falls vorhanden und nicht leer)
+if [ -d "backups" ] && [ "$(ls -A backups 2>/dev/null)" ]; then
+    cp -r backups "$BACKUP_DIR/backups_folder" 2>/dev/null || true
     echo "✅ Backup-Ordner gesichert"
 fi
 
@@ -142,7 +179,7 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     echo "   Zu:  $(git rev-parse --short origin/$REPO_BRANCH)"
     
     # Stash lokale Änderungen (falls vorhanden)
-    git stash push -m "Auto-stash before update $(date)"
+    git stash push -m "Auto-stash before update $(date)" 2>/dev/null || true
     
     # Hard reset zum neuesten Stand
     git reset --hard origin/$REPO_BRANCH
@@ -152,10 +189,17 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     
     # Dependencies aktualisieren
     echo "📦 Aktualisiere Dependencies..."
-    npm cache clean --force
-    if ! npm install --production; then
-        echo "⚠️  Versuche mit legacy-peer-deps..."
-        npm install --production --legacy-peer-deps
+    npm cache clean --force 2>/dev/null || true
+    
+    # NPM install mit verschiedenen Fallback-Optionen
+    if npm install --production --omit=dev; then
+        echo "✅ Dependencies mit --omit=dev installiert"
+    elif npm install --production --legacy-peer-deps; then
+        echo "✅ Dependencies mit --legacy-peer-deps installiert"
+    elif npm install --production; then
+        echo "✅ Dependencies installiert"
+    else
+        echo "⚠️  Dependency-Installation fehlgeschlagen - fahre trotzdem fort"
     fi
     
     # Verzeichnisse sicherstellen
@@ -174,10 +218,9 @@ if [ "$LOCAL" != "$REMOTE" ]; then
         echo "✅ schedules.json wiederhergestellt"
     fi
     
-    # Backup-Ordner wiederherstellen (merge mit neuen Dateien)
+    # Backup-Ordner wiederherstellen (ohne rsync)
     if [ -d "$BACKUP_DIR/backups_folder" ]; then
-        rsync -av "$BACKUP_DIR/backups_folder/" backups/
-        echo "✅ Backup-Ordner wiederhergestellt"
+        restore_backup_folder "$BACKUP_DIR/backups_folder" "backups"
     fi
     
     # Benutzerdefinierte Frontend-Dateien wiederherstellen
@@ -191,10 +234,9 @@ if [ "$LOCAL" != "$REMOTE" ]; then
         echo "✅ Benutzerdefinierte JS-Datei wiederhergestellt"
     fi
     
-    # Frontend-Dateien prüfen und ggf. erstellen
+    # Frontend-Dateien prüfen
     echo "🎨 Prüfe Frontend-Dateien..."
     
-    # Prüfe ob alle erforderlichen Frontend-Dateien vorhanden sind
     FRONTEND_FILES=(
         "public/index.html"
         "public/styles.css"
@@ -213,7 +255,7 @@ if [ "$LOCAL" != "$REMOTE" ]; then
         for file in "${MISSING_FILES[@]}"; do
             echo "   - $file"
         done
-        echo "ℹ️  Stelle sicher, dass alle Frontend-Dateien im Repository vorhanden sind"
+        echo "ℹ️  Führe 'git reset --hard origin/main' aus, falls Dateien fehlen"
     else
         echo "✅ Alle Frontend-Dateien vorhanden"
     fi
@@ -237,24 +279,24 @@ fi
 
 # Cleanup der temporären Backup-Dateien
 echo "🧹 Räume temporäre Dateien auf..."
-rm -rf "$BACKUP_DIR"
+rm -rf "$BACKUP_DIR" 2>/dev/null || true
 
-# Zeige aktuelle Git-Informationen und Dateistruktur
+# Zeige aktuelle Installation
 echo "================================="
 echo "📊 AKTUELLE INSTALLATION"
 echo "================================="
 echo "Repository: $(git remote get-url origin)"
-echo "Branch: $(git branch --show-current)"
+echo "Branch: $(git branch --show-current 2>/dev/null || echo "main")"
 echo "Commit: $(git rev-parse --short HEAD)"
-echo "Datum: $(git log -1 --format=%ci)"
-echo "Node.js: $(node --version)"
-echo "NPM: $(npm --version)"
+echo "Datum: $(git log -1 --format=%ci 2>/dev/null || echo "Unknown")"
+echo "Node.js: $(node --version 2>/dev/null || echo "Unknown")"
+echo "NPM: $(npm --version 2>/dev/null || echo "Unknown")"
 echo ""
 echo "📁 Dateistruktur:"
 echo "├── server.js $([ -f "server.js" ] && echo "✅" || echo "❌")"
 echo "├── package.json $([ -f "package.json" ] && echo "✅" || echo "❌")"
 echo "├── config.json $([ -f "config.json" ] && echo "✅" || echo "❌")"
-echo "├── update.sh $([ -f "update.sh" ] && echo "✅" || echo "❌") $([ -x "update.sh" ] && echo "(🔓 ausführbar)" || echo "(🔒 nicht ausführbar)")"
+echo "├── update.sh $([ -f "update.sh" ] && echo "✅" || echo "❌") $([ -x "update.sh" ] && echo "(🔓)" || echo "(🔒)")"
 echo "└── public/"
 echo "    ├── index.html $([ -f "public/index.html" ] && echo "✅" || echo "❌")"
 echo "    ├── styles.css $([ -f "public/styles.css" ] && echo "✅" || echo "❌")"
@@ -267,12 +309,13 @@ echo "├── backups/ $([ -d "backups" ] && echo "✅" || echo "❌")"
 echo "├── logs/ $([ -d "logs" ] && echo "✅" || echo "❌")"
 echo "└── config/ $([ -d "config" ] && echo "✅" || echo "❌")"
 echo ""
-echo "🔧 Berechtigungen:"
-echo "├── update.sh: $(ls -l update.sh | cut -d' ' -f1)"
-echo "├── server.js: $(ls -l server.js | cut -d' ' -f1 2>/dev/null || echo "❌")"
-echo "└── public/: $(ls -ld public | cut -d' ' -f1 2>/dev/null || echo "❌")"
+echo "🔧 Verfügbare Tools:"
+echo "├── git: $(command -v git >/dev/null 2>&1 && echo "✅" || echo "❌")"
+echo "├── npm: $(command -v npm >/dev/null 2>&1 && echo "✅" || echo "❌")"
+echo "├── node: $(command -v node >/dev/null 2>&1 && echo "✅" || echo "❌")"
+echo "└── rsync: $(command -v rsync >/dev/null 2>&1 && echo "✅" || echo "❌ (nicht benötigt)")"
 echo ""
-echo "Legende: ✅ Vorhanden | ❌ Fehlt | 📝 Benutzerdefiniert | ⚪ Optional | 🔓 Ausführbar | 🔒 Nicht ausführbar"
+echo "Legende: ✅ OK | ❌ Fehlt | 📝 Benutzerdefiniert | ⚪ Optional | 🔓 Ausführbar | 🔒 Gesperrt"
 echo "================================="
 
 echo "🎉 Update-Prozess abgeschlossen!"
@@ -286,10 +329,9 @@ else
     echo "   Führe manuell aus: chmod +x update.sh"
 fi
 
-# Kurze Anleitung für Frontend-Anpassungen
 echo ""
-echo "💡 TIPP: Frontend-Anpassungen"
-echo "Erstelle optional diese Dateien für eigene Anpassungen:"
-echo "├── public/custom.css  - Für eigene CSS-Styles"
-echo "└── public/custom.js   - Für eigene JavaScript-Funktionen"
-echo "Diese Dateien werden bei Updates automatisch gesichert!"
+echo "💡 HINWEIS: Frontend-Anpassungen"
+echo "Für eigene Anpassungen erstelle:"
+echo "├── public/custom.css  - Eigene CSS-Styles"
+echo "└── public/custom.js   - Eigene JavaScript-Funktionen"
+echo "Diese werden bei Updates automatisch gesichert!"
