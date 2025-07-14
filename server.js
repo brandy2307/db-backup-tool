@@ -22,6 +22,9 @@ class DatabaseBackupTool {
       this.config.backup.defaultPath,
       "schedules.json"
     );
+    // Fest integriertes Update-Repository
+    this.updateRepository = "https://github.com/brandy23/db-backup-tool.git";
+    this.updateBranch = "main";
     this.init();
   }
 
@@ -52,10 +55,11 @@ class DatabaseBackupTool {
         config.updates = config.updates || {};
         config.updates.autoUpdate = process.env.AUTO_UPDATE === "true";
       }
-      if (process.env.GITHUB_REPO) {
-        config.updates = config.updates || {};
-        config.updates.repository = process.env.GITHUB_REPO;
-      }
+
+      // Repository-Informationen fest setzen (nicht überschreibbar)
+      config.updates = config.updates || {};
+      config.updates.repository = this.updateRepository;
+      config.updates.branch = this.updateBranch;
 
       return config;
     } catch (error) {
@@ -89,7 +93,9 @@ class DatabaseBackupTool {
         return;
       }
 
-      console.log("🔍 Prüfe auf Updates...");
+      console.log("🔍 Prüfe auf Updates vom offiziellen Repository...");
+      console.log(`📦 Repository: ${this.updateRepository}`);
+      console.log(`🔗 Branch: ${this.updateBranch}`);
 
       // Führe das Update-Script aus
       exec("./update.sh", (error, stdout, stderr) => {
@@ -247,7 +253,8 @@ class DatabaseBackupTool {
               date: gitDate,
             },
             autoUpdate: this.config.updates?.autoUpdate || false,
-            repository: this.config.updates?.repository || "Not configured",
+            repository: this.updateRepository, // Fest integriert
+            branch: this.updateBranch, // Fest integriert
             nodeVersion: process.version,
             uptime: process.uptime(),
           });
@@ -361,7 +368,6 @@ class DatabaseBackupTool {
       console.error("❌ Fehler beim Laden der Zeitpläne:", error);
     }
   }
-
   // Zeitplan-Job aus gespeicherten Daten wiederherstellen
   recreateScheduleJob(scheduleData) {
     try {
@@ -404,6 +410,7 @@ class DatabaseBackupTool {
       );
     }
   }
+  
   // Backup für geplante Aufgaben ausführen
   async executeScheduledBackup(dbConfig) {
     const safeDatabaseName = (dbConfig.database || "unknown_db").replace(
@@ -661,7 +668,6 @@ class DatabaseBackupTool {
         .json({ error: "Fehler beim Erstellen des Backups: " + error.message });
     }
   }
-
   async deleteBackup(req, res) {
     const { filename } = req.params;
     const backupPath = path.join(this.config.backup.defaultPath, filename);
@@ -838,6 +844,35 @@ class DatabaseBackupTool {
       console.error("Fehler beim Aufräumen alter Backups:", error);
     }
   }
+
+  startServer() {
+    const port = this.config.server.port;
+    const host = this.config.server.host;
+
+    this.app.listen(port, host, () => {
+      console.log("");
+      console.log("🚀 Database Backup Tool gestartet!");
+      console.log("📡 Server läuft auf " + host + ":" + port);
+      console.log(
+        "🔐 Standard Login: " +
+          this.config.security.defaultAdmin.username +
+          " / " +
+          this.config.security.defaultAdmin.password
+      );
+      console.log("📁 Backup-Verzeichnis: " + this.config.backup.defaultPath);
+      console.log("📋 Zeitplan-Datei: " + this.schedulesFile);
+      console.log(
+        "🔄 Auto-Update: " +
+          (this.config.updates?.autoUpdate ? "Aktiviert" : "Deaktiviert")
+      );
+      console.log("📦 Offizielles Repository: " + this.updateRepository);
+      console.log("🔗 Branch: " + this.updateBranch);
+      console.log("");
+      console.log(
+        "⚠️  WICHTIG: Ändere die Standard-Passwörter nach dem ersten Login!"
+      );
+    });
+  }
   getMainPage() {
     return `<!DOCTYPE html>
 <html lang="de">
@@ -877,6 +912,9 @@ class DatabaseBackupTool {
         .system-info p { margin: 5px 0; font-size: 0.9em; }
         .update-button { background: #27ae60; margin-left: 10px; }
         .update-button:hover { background: #219a52; }
+        .repo-info { background: #e8f5e8; padding: 10px; border-radius: 4px; border-left: 4px solid #27ae60; margin-bottom: 15px; }
+        .repo-info h4 { color: #27ae60; margin-bottom: 5px; }
+        .repo-info p { font-size: 0.9em; color: #555; margin: 2px 0; }
     </style>
 </head>
 <body>
@@ -1016,6 +1054,14 @@ class DatabaseBackupTool {
 
             <div id="system-content" class="tab-content">
                 <h2>System-Informationen</h2>
+                
+                <div class="repo-info">
+                    <h4>🔄 Offizielles Update-Repository</h4>
+                    <p><strong>Repository:</strong> ${this.updateRepository}</p>
+                    <p><strong>Branch:</strong> ${this.updateBranch}</p>
+                    <p><strong>Updates:</strong> Automatisch vom offiziellen Repository</p>
+                </div>
+                
                 <div id="systemInfo" class="system-info">
                     <h3>Lädt System-Informationen...</h3>
                 </div>
@@ -1305,7 +1351,8 @@ class DatabaseBackupTool {
                         '<p><strong>Git Commit:</strong> ' + systemInfo.git.commit + '</p>' +
                         '<p><strong>Git Datum:</strong> ' + systemInfo.git.date + '</p>' +
                         '<p><strong>Auto-Update:</strong> ' + (systemInfo.autoUpdate ? '✅ Aktiviert' : '❌ Deaktiviert') + '</p>' +
-                        '<p><strong>Repository:</strong> ' + systemInfo.repository + '</p>';
+                        '<p><strong>Repository:</strong> ' + systemInfo.repository + '</p>' +
+                        '<p><strong>Branch:</strong> ' + systemInfo.branch + '</p>';
                 } else {
                     systemInfoDiv.innerHTML = '<div class="error">' + systemInfo.error + '</div>';
                 }
@@ -1409,36 +1456,6 @@ class DatabaseBackupTool {
     </script>
 </body>
 </html>`;
-  }
-
-  startServer() {
-    const port = this.config.server.port;
-    const host = this.config.server.host;
-
-    this.app.listen(port, host, () => {
-      console.log("");
-      console.log("🚀 Database Backup Tool gestartet!");
-      console.log("📡 Server läuft auf " + host + ":" + port);
-      console.log(
-        "🔐 Standard Login: " +
-          this.config.security.defaultAdmin.username +
-          " / " +
-          this.config.security.defaultAdmin.password
-      );
-      console.log("📁 Backup-Verzeichnis: " + this.config.backup.defaultPath);
-      console.log("📋 Zeitplan-Datei: " + this.schedulesFile);
-      console.log(
-        "🔄 Auto-Update: " +
-          (this.config.updates?.autoUpdate ? "Aktiviert" : "Deaktiviert")
-      );
-      if (this.config.updates?.repository) {
-        console.log("📦 Repository: " + this.config.updates.repository);
-      }
-      console.log("");
-      console.log(
-        "⚠️  WICHTIG: Ändere die Standard-Passwörter nach dem ersten Login!"
-      );
-    });
   }
 }
 

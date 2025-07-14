@@ -1,0 +1,28 @@
+{
+  "server": {
+    "port": 8080,
+    "host": "0.0.0.0"
+  },
+  "security": {
+    "sessionSecret": "change-this-secret-key-in-production",
+    "jwtSecret": "change-this-jwt-secret-in-production",
+    "defaultAdmin": {
+      "username": "admin",
+      "password": "admin123"
+    }
+  },
+  "backup": {
+    "defaultPath": "./backups",
+    "maxBackups": 10,
+    "compression": true
+  },
+  "logging": {
+    "level": "info",
+    "file": "./logs/app.log"
+  },
+  "updates": {
+    "autoUpdate": true,
+    "repository": "https://github.com/brandy23/db-backup-tool.git",
+    "branch": "main"
+  }
+}

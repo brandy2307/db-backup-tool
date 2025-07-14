@@ -1,6 +1,6 @@
 # Database Backup Tool - Pterodactyl Egg
 
-Ein automatisiertes Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreSQL und MongoDB, entwickelt speziell für Pterodactyl Panel mit Auto-Update Funktionalität.
+Ein automatisiertes Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreSQL und MongoDB, entwickelt speziell für Pterodactyl Panel mit **fest integriertem offiziellen Update-Repository**.
 
 ## 🚀 Features
 
@@ -12,8 +12,9 @@ Ein automatisiertes Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreS
 - **Sicherheit**: JWT-basierte Authentifizierung
 - **Rate Limiting**: Schutz vor Missbrauch
 - **Cleanup**: Automatisches Löschen alter Backups
-- **🔄 Auto-Update**: Automatische Updates von GitHub
+- **🔄 Auto-Update**: Automatische Updates vom **offiziellen Repository**
 - **📊 System-Monitoring**: Detaillierte System-Informationen
+- **🔒 Fest integriert**: Keine manuelle Repository-Konfiguration nötig
 
 ## 📋 Systemanforderungen
 
@@ -25,33 +26,23 @@ Ein automatisiertes Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreS
 
 ## 🛠️ Installation in Pterodactyl
 
-### 1. Repository Setup
-
-1. Fork oder erstelle ein neues Repository auf GitHub
-2. Lade alle Dateien in dein Repository hoch
-3. Stelle sicher, dass das Repository öffentlich ist oder verwende SSH-Keys
-
-### 2. Egg Import
+### 1. Egg Import
 
 1. Lade die `dbtool-egg.json` Datei herunter
-2. **WICHTIG**: Ersetze in der JSON-Datei:
-   - `DEIN-USERNAME` → deinen GitHub Username
-   - `db-backup-tool` → deinen Repository Namen
+2. **Wichtig**: Du musst **keine Repository-URL** mehr konfigurieren - alles ist fest integriert!
 3. Gehe in dein Pterodactyl Admin Panel
 4. Navigiere zu `Admin` → `Nests` → `Import Egg`
-5. Wähle die angepasste JSON-Datei aus und importiere sie
+5. Wähle die JSON-Datei aus und importiere sie
 
-### 3. Server erstellen
+### 2. Server erstellen
 
-1. Erstelle einen neuen Server mit dem "DB Backup Tool (Auto-Update)" Egg
-2. Konfiguriere die Umgebungsvariablen:
+1. Erstelle einen neuen Server mit dem "DB Backup Tool (Fest integriertes Repository)" Egg
+2. Konfiguriere nur noch die **reduzierten** Umgebungsvariablen:
 
-#### 🔧 Umgebungsvariablen
+#### 🔧 Umgebungsvariablen (Vereinfacht!)
 
 | Variable | Beschreibung | Standard | Beispiel |
 |----------|-------------|----------|----------|
-| **GITHUB_REPOSITORY** | GitHub Repository URL | `https://github.com/DEIN-USERNAME/db-backup-tool.git` | `https://github.com/maxmuster/backup-tool.git` |
-| **GITHUB_BRANCH** | Branch für Updates | `main` | `main` oder `master` |
 | **AUTO_UPDATE** | Auto-Update aktivieren | `true` | `true` oder `false` |
 | **NODE_ENV** | Node.js Umgebung | `production` | `production` |
 | **ADMIN_USERNAME** | Admin Benutzername | `admin` | `admin` |
@@ -61,19 +52,30 @@ Ein automatisiertes Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreS
 | **MAX_BACKUPS** | Max. Anzahl Backups | `10` | `10` |
 | **ENABLE_COMPRESSION** | Komprimierung | `true` | `true` |
 
-### 4. Server starten
+**✅ Nicht mehr nötig:**
+- ~~GITHUB_REPOSITORY~~ (fest integriert)
+- ~~GITHUB_BRANCH~~ (fest integriert)
+
+### 3. Server starten
 
 1. Starte den Server über das Pterodactyl Panel
-2. Beim ersten Start wird automatisch das Repository geklont
+2. Beim ersten Start wird automatisch das **offizielle Repository** geklont
 3. Alle Abhängigkeiten werden installiert
 4. Server ist bereit wenn "Server läuft auf Port" in den Logs erscheint
 
 ## 🔄 Auto-Update System
 
+### Was ist neu?
+
+- **Fest integriertes Repository**: Updates kommen automatisch vom offiziellen `https://github.com/brandy23/db-backup-tool.git`
+- **Keine Konfiguration nötig**: Kein manuelles Setzen von Repository-URLs mehr
+- **Sicherer**: Nur Updates vom vertrauenswürdigen offiziellen Repository
+- **Einfacher**: Weniger Fehlerquellen bei der Installation
+
 ### Funktionsweise
 
-1. **Beim Start**: Automatische Prüfung auf Updates
-2. **Git-Pull**: Neueste Version wird von GitHub geholt
+1. **Beim Start**: Automatische Prüfung auf Updates vom offiziellen Repository
+2. **Git-Pull**: Neueste Version wird vom offiziellen Repository geholt
 3. **Backup**: Konfiguration und Zeitpläne werden gesichert
 4. **Update**: Code wird aktualisiert, Dependencies installiert
 5. **Restore**: Konfiguration wird wiederhergestellt
@@ -83,11 +85,13 @@ Ein automatisiertes Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreS
 #### 🔄 Automatisch
 - Bei jedem Serverstart
 - Kann über `AUTO_UPDATE=false` deaktiviert werden
+- Kommt automatisch vom offiziellen Repository
 
 #### 🖱️ Manuell über Web-Interface
 1. Anmelden im Web-Interface
 2. "System"-Tab öffnen
 3. "Manuelles Update" Button klicken
+4. Updates werden vom offiziellen Repository geholt
 
 #### 💻 Manuell über SSH
 ```bash
@@ -99,11 +103,12 @@ cd ~/db-backup-tool
 
 Das Web-Interface zeigt unter dem "System"-Tab:
 - **Version**: Aktuelle Tool-Version
-- **Git Commit**: Aktueller Git-Commit Hash
+- **Git Commit**: Aktueller Git-Commit Hash (vom offiziellen Repository)
 - **Node.js Version**: Installierte Node.js Version
 - **Uptime**: Server-Laufzeit
 - **Auto-Update Status**: Aktiviert/Deaktiviert
-- **Repository**: Konfigurierte Repository URL
+- **Repository**: Offizielles Repository (fest integriert)
+- **Branch**: main (fest integriert)
 
 ## 🎯 Verwendung
 
@@ -131,24 +136,28 @@ Das Web-Interface zeigt unter dem "System"-Tab:
 2. Download, Löschen und Verwalten von Backups
 3. Automatisches Cleanup alter Backups
 
-## 🔒 Sicherheit
+## 🔒 Sicherheit & Vorteile
 
 ### Update-Sicherheit
 
+- **Offizielles Repository**: Updates nur von der vertrauenswürdigen Quelle
 - **Backup**: Automatisches Backup der Konfiguration vor Updates
 - **Rollback**: Git-History ermöglicht Rollbacks
 - **Validation**: Überprüfung auf gültige Git-Repository
+- **Keine User-Repos**: Schutz vor manipulierten oder unsicheren Repositories
+
+### Vereinfachte Installation
+
+- **Weniger Fehlerquellen**: Keine falschen Repository-URLs mehr
+- **Einfacher Setup**: Reduzierte Anzahl von Umgebungsvariablen
+- **Konsistente Updates**: Alle Installationen verwenden dasselbe Repository
+- **Besserer Support**: Einheitliche Codebasis für alle Nutzer
 
 ### Authentifizierung
 
 - JWT-basierte Token-Authentifizierung
 - Session-Management mit sicheren Cookies
 - Rate Limiting zum Schutz vor Brute-Force-Angriffen
-
-### Passwort-Sicherheit
-
-- Passwörter werden mit bcrypt gehasht
-- Standardpasswörter sollten sofort geändert werden
 
 ## 📁 Dateistruktur
 
@@ -158,31 +167,19 @@ Das Web-Interface zeigt unter dem "System"-Tab:
 │   ├── server.js          # Hauptserver-Datei
 │   ├── package.json       # Node.js Abhängigkeiten
 │   ├── config.json        # Konfigurationsdatei
-│   ├── update.sh          # Update-Script
+│   ├── update.sh          # Update-Script (offizielles Repository)
 │   ├── backups/           # Backup-Verzeichnis
 │   │   └── schedules.json # Gespeicherte Zeitpläne
 │   ├── logs/              # Log-Dateien
-│   ├── .git/              # Git Repository
+│   ├── .git/              # Git Repository (offiziell)
 │   └── node_modules/      # Node.js Module
 ```
 
-## 🚀 Entwicklung & Updates
+## 🚀 Für Entwickler
 
-### Lokale Entwicklung
+### Offizielle Updates entwickeln
 
-```bash
-# Repository klonen
-git clone https://github.com/DEIN-USERNAME/db-backup-tool.git
-cd db-backup-tool
-
-# Dependencies installieren
-npm install
-
-# Development Server starten
-npm run dev
-```
-
-### Updates veröffentlichen
+Nur der offizielle Maintainer kann Updates veröffentlichen:
 
 ```bash
 # Änderungen committen
@@ -190,7 +187,7 @@ git add .
 git commit -m "Neue Features hinzugefügt"
 git push origin main
 
-# Auf Servern wird automatisch geupdatet beim nächsten Restart
+# Auf allen Servern wird automatisch geupdatet beim nächsten Restart
 ```
 
 ### Versioning
@@ -214,16 +211,20 @@ git log --oneline -5
 ./update.sh
 ```
 
-**Problem**: Repository nicht gefunden
-- Prüfe GITHUB_REPOSITORY URL
-- Stelle sicher, dass Repository öffentlich ist
-- Prüfe Branch-Name (main vs master)
+**Problem**: Repository nicht verfügbar
+- Das offizielle Repository ist möglicherweise temporär nicht erreichbar
+- Warte einige Minuten und versuche es erneut
+- Prüfe die Internetverbindung des Servers
 
 **Problem**: Git-Konflikte
 ```bash
 # Hard reset zum letzten funktionierenden Zustand
 git reset --hard origin/main
 ```
+
+**Problem**: Falsches Repository
+- Das Tool überprüft automatisch, ob das korrekte offizielle Repository verwendet wird
+- Falls nicht, wird die Remote-URL automatisch korrigiert
 
 ### Backup-Probleme
 
@@ -236,23 +237,115 @@ git reset --hard origin/main
 - Zeitpläne werden in `backups/schedules.json` gespeichert
 - Bei Updates automatisch gesichert und wiederhergestellt
 
+### Installation-Probleme
+
+**Problem**: Installation schlägt fehl
+1. Prüfe Internetverbindung
+2. Stelle sicher, dass das offizielle Repository erreichbar ist
+3. Überprüfe Docker-Container-Logs
+
+**Problem**: Dependencies fehlen
+```bash
+cd ~/db-backup-tool
+npm install --production
+```
+
 ## 📞 Support
 
 Bei Problemen:
 
 1. Prüfe die Logs im Pterodactyl Panel
 2. Verwende das System-Tab für Diagnose-Informationen
-3. Überprüfe GitHub Repository Einstellungen
-4. Prüfe Umgebungsvariablen
+3. Überprüfe die Internetverbindung
+4. Stelle sicher, dass Auto-Update aktiviert ist
 
 ## ⚠️ Wichtige Hinweise
 
-- **Repository**: Muss öffentlich zugänglich sein
-- **Passwörter**: Ändere alle Standard-Passwörter
+### Was ist neu in dieser Version?
+
+- **✅ Fest integriertes Repository**: Kein manueller Repository-Setup mehr nötig
+- **✅ Weniger Umgebungsvariablen**: Einfachere Installation
+- **✅ Sicherere Updates**: Nur vom offiziellen Repository
+- **✅ Weniger Fehlerquellen**: Keine falschen Repository-URLs mehr möglich
+- **✅ Besserer Support**: Einheitliche Codebasis für alle Nutzer
+
+### Wichtige Sicherheitshinweise
+
+- **Passwörter**: Ändere alle Standard-Passwörter nach der Installation
 - **Backup-Sicherheit**: Sichere den Zugang zu Backups
-- **Updates**: Teste Updates in einer Entwicklungsumgebung
-- **Git-Repository**: Verwende aussagekräftige Commit-Messages
+- **Netzwerk-Sicherheit**: Verwende Firewalls und sichere Ports
+- **Updates**: Lass Auto-Update aktiviert für Sicherheits-Patches
+
+### Upgrade von der alten Version
+
+Falls du bereits eine Installation mit manueller Repository-Konfiguration hast:
+
+1. **Backup erstellen**: Sichere deine `config.json` und `backups/schedules.json`
+2. **Server löschen**: Lösche den alten Server
+3. **Neues Egg verwenden**: Importiere das neue Egg
+4. **Server neu erstellen**: Mit den neuen, reduzierten Umgebungsvariablen
+5. **Backup wiederherstellen**: Lade deine Konfigurationsdateien wieder hoch
+
+## 🔄 Migration Guide
+
+### Von manueller Repository-Konfiguration zur fest integrierten Version
+
+```bash
+# 1. Backup der wichtigen Dateien
+cp config.json config.json.backup
+cp backups/schedules.json schedules.json.backup
+
+# 2. Repository-URL prüfen und ggf. korrigieren
+git remote set-url origin https://github.com/brandy23/db-backup-tool.git
+
+# 3. Update durchführen
+./update.sh
+
+# 4. Konfiguration wiederherstellen
+mv config.json.backup config.json
+mv schedules.json.backup backups/schedules.json
+```
+
+## 🎉 Vorteile der neuen Version
+
+### Für Administratoren
+- **Einfachere Installation**: Weniger zu konfigurierende Variablen
+- **Weniger Support-Anfragen**: Standardisierte Installation reduziert Probleme
+- **Sicherere Updates**: Nur vom vertrauenswürdigen offiziellen Repository
+
+### Für Endnutzer
+- **Zuverlässigere Updates**: Keine Abhängigkeit von User-Repositories
+- **Konsistente Erfahrung**: Alle Nutzer haben dieselbe Codebasis
+- **Automatische Sicherheit**: Security-Updates kommen automatisch
+
+### Für Entwickler
+- **Einheitliche Basis**: Alle Issues und Bugs betreffen dieselbe Codebasis
+- **Bessere Kontrolle**: Zentrale Verwaltung von Updates und Features
+- **Einfachere Wartung**: Ein Repository für alle Installationen
+
+## 📋 Checklist für neue Installation
+
+- [ ] Pterodactyl Egg importiert
+- [ ] Server mit korrekten Umgebungsvariablen erstellt
+- [ ] Admin-Passwort geändert
+- [ ] Session- und JWT-Secrets gesetzt
+- [ ] Auto-Update aktiviert
+- [ ] Erste Backup-Tests durchgeführt
+- [ ] Zeitpläne konfiguriert (optional)
+- [ ] System-Informationen geprüft
 
 ## 📜 Lizenz
 
 MIT License - Verwende das Tool frei für private und kommerzielle Zwecke.
+
+## 🤝 Beitragen
+
+Da das Repository nun fest integriert ist, wende dich für Feature-Requests und Bug-Reports an den offiziellen Maintainer:
+
+- **Issues**: Über das offizielle GitHub Repository
+- **Feature Requests**: Über GitHub Issues
+- **Bug Reports**: Mit detaillierten Logs und Reproduktionsschritten
+
+---
+
+**🔗 Offizielles Repository**: https://github.com/brandy23/db-backup-tool.git
