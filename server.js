@@ -23,7 +23,7 @@ class DatabaseBackupTool {
       "schedules.json"
     );
     // Fest integriertes Update-Repository
-    this.updateRepository = "https://github.com/brandy23/db-backup-tool.git";
+    this.updateRepository = "https://github.com/brandy2307/db-backup-tool.git";
     this.updateBranch = "main";
     this.init();
   }

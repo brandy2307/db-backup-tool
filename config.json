@@ -22,7 +22,7 @@
   },
   "updates": {
     "autoUpdate": true,
-    "repository": "https://github.com/brandy23/db-backup-tool.git",
+    "repository": "https://github.com/brandy2307/db-backup-tool.git",
     "branch": "main"
   }
 }

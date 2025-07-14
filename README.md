@@ -67,7 +67,7 @@ Ein automatisiertes Datenbank-Backup-Tool mit Web-Interface für MySQL, PostgreS
 
 ### Was ist neu?
 
-- **Fest integriertes Repository**: Updates kommen automatisch vom offiziellen `https://github.com/brandy23/db-backup-tool.git`
+- **Fest integriertes Repository**: Updates kommen automatisch vom offiziellen `https://github.com/brandy2307/db-backup-tool.git`
 - **Keine Konfiguration nötig**: Kein manuelles Setzen von Repository-URLs mehr
 - **Sicherer**: Nur Updates vom vertrauenswürdigen offiziellen Repository
 - **Einfacher**: Weniger Fehlerquellen bei der Installation
@@ -296,7 +296,7 @@ cp config.json config.json.backup
 cp backups/schedules.json schedules.json.backup
 
 # 2. Repository-URL prüfen und ggf. korrigieren
-git remote set-url origin https://github.com/brandy23/db-backup-tool.git
+git remote set-url origin https://github.com/brandy2307/db-backup-tool.git
 
 # 3. Update durchführen
 ./update.sh
@@ -348,4 +348,4 @@ Da das Repository nun fest integriert ist, wende dich für Feature-Requests und 
 
 ---
 
-**🔗 Offizielles Repository**: https://github.com/brandy23/db-backup-tool.git
+**🔗 Offizielles Repository**: https://github.com/brandy2307/db-backup-tool.git

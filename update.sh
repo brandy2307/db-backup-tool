@@ -5,7 +5,7 @@
 set -e
 
 # Fest definierte Repository-Daten
-REPO_URL="https://github.com/brandy23/db-backup-tool.git"
+REPO_URL="https://github.com/brandy2307/db-backup-tool.git"
 REPO_BRANCH="main"
 
 echo "================================="
