@@ -9,7 +9,7 @@
 <body>
     <div class="header">
         <h1>Database Backup Tool</h1>
-        <p>Automatisierte Datenbank-Backups für MySQL, PostgreSQL und MongoDB</p>
+        <p>Automatisierte Datenbank-Backups für MySQL, PostgreSQL und MongoDB mit Git Integration</p>
     </div>
 
     <div class="container">
@@ -36,6 +36,7 @@
                 <button class="tab active" onclick="showTab('backup')">Backup erstellen</button>
                 <button class="tab" onclick="showTab('backups')">Backups verwalten</button>
                 <button class="tab" onclick="showTab('schedule')">Zeitplan</button>
+                <button class="tab" onclick="showTab('git-backup')">Git Backup</button>
                 <button class="tab" onclick="showTab('system')">System</button>
             </div>
 
@@ -141,6 +142,113 @@
                 <div id="schedulesList" class="backup-list"></div>
             </div>
 
+            <div id="git-backup-content" class="tab-content">
+                <h2>Git Backup Konfiguration</h2>
+                
+                <div class="git-backup-info">
+                    <h4>📤 Automatisches Git Backup</h4>
+                    <p>Sende deine Backups automatisch zu GitHub, GitLab oder anderen Git-Repositories.</p>
+                    <p><strong>Funktionen:</strong></p>
+                    <ul>
+                        <li>✅ Automatischer Push nach jedem Backup</li>
+                        <li>✅ Intelligentes Cleanup alter Backups</li>
+                        <li>✅ Unterstützung für GitHub, GitLab, Bitbucket, etc.</li>
+                        <li>✅ Sichere Token-basierte Authentifizierung</li>
+                        <li>✅ Separate Git-Repository Verwaltung</li>
+                    </ul>
+                </div>
+
+                <form id="gitBackupForm" class="backup-form">
+                    <div class="form-group">
+                        <label for="gitBackupEnabled">
+                            <input type="checkbox" id="gitBackupEnabled"> Git Backup aktivieren
+                        </label>
+                        <small>Aktiviere automatisches Pushen von Backups zu einem Git Repository</small>
+                    </div>
+
+                    <div class="git-config-field form-group" style="display: none;">
+                        <label for="gitBackupRepository">Git Repository URL:</label>
+                        <input type="url" id="gitBackupRepository" placeholder="https://github.com/username/backup-repo.git">
+                        <small>HTTPS URL deines Git Repositories (GitHub, GitLab, Bitbucket, etc.)</small>
+                    </div>
+
+                    <div class="git-config-field form-row" style="display: none;">
+                        <div class="form-group">
+                            <label for="gitBackupUsername">Benutzername:</label>
+                            <input type="text" id="gitBackupUsername" placeholder="dein-git-username">
+                            <small>Dein Git-Benutzername</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="gitBackupBranch">Branch:</label>
+                            <input type="text" id="gitBackupBranch" placeholder="main" value="main">
+                            <small>Git Branch (Standard: main)</small>
+                        </div>
+                    </div>
+
+                    <div class="git-config-field form-group" style="display: none;">
+                        <label for="gitBackupToken">Personal Access Token:</label>
+                        <input type="password" id="gitBackupToken" placeholder="Personal Access Token oder App Password">
+                        <small>
+                            <strong>GitHub:</strong> Settings → Developer settings → Personal access tokens<br>
+                            <strong>GitLab:</strong> User Settings → Access Tokens<br>
+                            <strong>Bitbucket:</strong> Personal settings → App passwords<br>
+                            <em>Benötigte Berechtigung: Repository read/write access</em>
+                        </small>
+                    </div>
+
+                    <div class="git-config-field" style="display: none;">
+                        <button type="submit">Konfiguration speichern</button>
+                        <button type="button" id="testGitBackup" onclick="testGitBackup()" style="background: #f39c12; margin-left: 10px;">Verbindung testen</button>
+                    </div>
+                </form>
+
+                <div id="gitBackupResult"></div>
+
+                <div class="git-backup-help" style="margin-top: 30px;">
+                    <h4>📋 Setup-Anleitung</h4>
+                    <div class="help-section">
+                        <h5>🔵 GitHub Setup:</h5>
+                        <ol>
+                            <li>Erstelle ein neues Repository auf GitHub (kann privat sein)</li>
+                            <li>Gehe zu Settings → Developer settings → Personal access tokens → Tokens (classic)</li>
+                            <li>Erstelle einen neuen Token mit "repo" Berechtigung</li>
+                            <li>Trage Repository URL, Benutzername und Token hier ein</li>
+                        </ol>
+                    </div>
+
+                    <div class="help-section">
+                        <h5>🟠 GitLab Setup:</h5>
+                        <ol>
+                            <li>Erstelle ein neues Projekt auf GitLab</li>
+                            <li>Gehe zu User Settings → Access Tokens</li>
+                            <li>Erstelle einen Token mit "write_repository" Berechtigung</li>
+                            <li>Verwende die HTTPS Clone-URL deines Projekts</li>
+                        </ol>
+                    </div>
+
+                    <div class="help-section">
+                        <h5>🔴 Bitbucket Setup:</h5>
+                        <ol>
+                            <li>Erstelle ein neues Repository auf Bitbucket</li>
+                            <li>Gehe zu Personal settings → App passwords</li>
+                            <li>Erstelle ein App-Passwort mit "Repositories: Write" Berechtigung</li>
+                            <li>Verwende die HTTPS Clone-URL deines Repositories</li>
+                        </ol>
+                    </div>
+
+                    <div class="help-section">
+                        <h5>⚙️ Funktionsweise:</h5>
+                        <ul>
+                            <li>Nach jedem erfolgreichen Backup wird die Datei automatisch zum Git Repository gepusht</li>
+                            <li>Bei Erreichen der maximalen Backup-Anzahl werden die ältesten Backups auch aus dem Git Repository entfernt</li>
+                            <li>MongoDB Backups (Verzeichnisse) werden derzeit nicht unterstützt - nur SQL-Dateien</li>
+                            <li>Das Git Repository wird separat in <code>backups/git-backup/</code> verwaltet</li>
+                            <li>Deine lokalen Backups bleiben unverändert - Git Backup ist eine zusätzliche Sicherung</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <div id="system-content" class="tab-content">
                 <h2>System-Informationen</h2>
                 
@@ -149,6 +257,11 @@
                     <p><strong>Repository:</strong> <span id="repo-url">Lade...</span></p>
                     <p><strong>Branch:</strong> <span id="repo-branch">Lade...</span></p>
                     <p><strong>Updates:</strong> Automatisch vom offiziellen Repository</p>
+                </div>
+
+                <div class="repo-info" style="background: #e8f4fd; border-left-color: #3498db;">
+                    <h4>📤 Git Backup Status</h4>
+                    <div id="git-backup-status">Lade...</div>
                 </div>
                 
                 <div id="systemInfo" class="system-info">

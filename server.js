@@ -25,6 +25,10 @@ class DatabaseBackupTool {
     // Fest integriertes Update-Repository
     this.updateRepository = "https://github.com/brandy2307/db-backup-tool.git";
     this.updateBranch = "main";
+    
+    // Git Backup Repository Pfad
+    this.gitBackupPath = path.join(this.config.backup.defaultPath, "git-backup");
+    
     this.init();
   }
 
@@ -56,6 +60,28 @@ class DatabaseBackupTool {
         config.updates.autoUpdate = process.env.AUTO_UPDATE === "true";
       }
 
+      // Git Backup Konfiguration aus Umgebungsvariablen
+      if (process.env.GIT_BACKUP_ENABLED) {
+        config.gitBackup = config.gitBackup || {};
+        config.gitBackup.enabled = process.env.GIT_BACKUP_ENABLED === "true";
+      }
+      if (process.env.GIT_BACKUP_REPOSITORY) {
+        config.gitBackup = config.gitBackup || {};
+        config.gitBackup.repository = process.env.GIT_BACKUP_REPOSITORY;
+      }
+      if (process.env.GIT_BACKUP_USERNAME) {
+        config.gitBackup = config.gitBackup || {};
+        config.gitBackup.username = process.env.GIT_BACKUP_USERNAME;
+      }
+      if (process.env.GIT_BACKUP_TOKEN) {
+        config.gitBackup = config.gitBackup || {};
+        config.gitBackup.token = process.env.GIT_BACKUP_TOKEN;
+      }
+      if (process.env.GIT_BACKUP_BRANCH) {
+        config.gitBackup = config.gitBackup || {};
+        config.gitBackup.branch = process.env.GIT_BACKUP_BRANCH;
+      }
+
       // Repository-Informationen fest setzen (nicht überschreibbar)
       config.updates = config.updates || {};
       config.updates.repository = this.updateRepository;
@@ -79,8 +105,178 @@ class DatabaseBackupTool {
     this.setupRoutes();
     this.setupDefaultUser();
     this.ensureDirectories();
+    await this.initializeGitBackup();
     this.loadSchedulesFromFile();
     this.startServer();
+  }
+
+  // Git Backup Repository initialisieren
+  async initializeGitBackup() {
+    if (!this.config.gitBackup?.enabled) {
+      console.log("📦 Git Backup ist deaktiviert");
+      return;
+    }
+
+    try {
+      console.log("🔧 Initialisiere Git Backup Repository...");
+      
+      // Git Backup Verzeichnis erstellen falls nicht vorhanden
+      if (!fs.existsSync(this.gitBackupPath)) {
+        fs.mkdirSync(this.gitBackupPath, { recursive: true });
+      }
+
+      const isGitRepo = fs.existsSync(path.join(this.gitBackupPath, ".git"));
+      
+      if (!isGitRepo) {
+        console.log("📁 Erstelle neues Git Repository für Backups...");
+        await this.execPromise(`cd "${this.gitBackupPath}" && git init`);
+        await this.execPromise(`cd "${this.gitBackupPath}" && git config user.name "DB Backup Tool"`);
+        await this.execPromise(`cd "${this.gitBackupPath}" && git config user.email "backup@localhost"`);
+        
+        // README erstellen
+        const readmeContent = `# Database Backups\n\nAutomatisch erstellte Datenbank-Backups vom DB Backup Tool.\n\nErstellt am: ${new Date().toLocaleString('de-DE')}\n`;
+        fs.writeFileSync(path.join(this.gitBackupPath, "README.md"), readmeContent);
+        
+        await this.execPromise(`cd "${this.gitBackupPath}" && git add README.md`);
+        await this.execPromise(`cd "${this.gitBackupPath}" && git commit -m "Initial commit: Setup backup repository"`);
+      }
+
+      // Remote Repository hinzufügen/aktualisieren falls konfiguriert
+      if (this.config.gitBackup.repository) {
+        const remoteUrl = this.buildGitRemoteUrl();
+        
+        try {
+          // Prüfe ob remote bereits existiert
+          await this.execPromise(`cd "${this.gitBackupPath}" && git remote get-url origin`);
+          // Remote existiert, aktualisiere URL
+          await this.execPromise(`cd "${this.gitBackupPath}" && git remote set-url origin "${remoteUrl}"`);
+          console.log("🔗 Git Remote URL aktualisiert");
+        } catch (error) {
+          // Remote existiert nicht, füge hinzu
+          await this.execPromise(`cd "${this.gitBackupPath}" && git remote add origin "${remoteUrl}"`);
+          console.log("🔗 Git Remote hinzugefügt");
+        }
+
+        // Branch konfigurieren
+        const branch = this.config.gitBackup.branch || "main";
+        await this.execPromise(`cd "${this.gitBackupPath}" && git checkout -B ${branch}`);
+        
+        // Initial push falls notwendig
+        try {
+          await this.execPromise(`cd "${this.gitBackupPath}" && git push -u origin ${branch}`, 10000);
+          console.log("✅ Git Backup Repository erfolgreich initialisiert");
+        } catch (error) {
+          console.log("⚠️  Git Push fehlgeschlagen (möglicherweise ist das Repository leer):", error.message);
+        }
+      }
+
+    } catch (error) {
+      console.error("❌ Fehler beim Initialisieren des Git Backup Repositories:", error);
+    }
+  }
+
+  // Git Remote URL mit Authentifizierung erstellen
+  buildGitRemoteUrl() {
+    const { repository, username, token } = this.config.gitBackup;
+    
+    if (username && token) {
+      // Format: https://username:token@github.com/user/repo.git
+      const url = repository.replace('https://', `https://${username}:${token}@`);
+      return url;
+    }
+    
+    return repository;
+  }
+
+  // Backup zu Git Repository pushen
+  async pushBackupToGit(backupFilePath, filename) {
+    if (!this.config.gitBackup?.enabled || !this.config.gitBackup?.repository) {
+      return;
+    }
+
+    try {
+      console.log(`📤 Pushe Backup zu Git: ${filename}`);
+      
+      // Backup-Datei ins Git Repository kopieren
+      const gitBackupFile = path.join(this.gitBackupPath, filename);
+      fs.copyFileSync(backupFilePath, gitBackupFile);
+      
+      // Git operations
+      await this.execPromise(`cd "${this.gitBackupPath}" && git add "${filename}"`);
+      
+      const commitMessage = `Add backup: ${filename} (${new Date().toLocaleString('de-DE')})`;
+      await this.execPromise(`cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`);
+      
+      const branch = this.config.gitBackup.branch || "main";
+      await this.execPromise(`cd "${this.gitBackupPath}" && git push origin ${branch}`, 30000);
+      
+      console.log(`✅ Backup erfolgreich zu Git gepusht: ${filename}`);
+      
+      // Cleanup alter Backups im Git Repository
+      await this.cleanupGitBackups();
+      
+    } catch (error) {
+      console.error(`❌ Fehler beim Git Push von ${filename}:`, error);
+      throw error;
+    }
+  }
+
+  // Alte Backups aus Git Repository entfernen
+  async cleanupGitBackups() {
+    if (!this.config.gitBackup?.enabled) {
+      return;
+    }
+
+    try {
+      console.log("🧹 Prüfe Git Repository auf alte Backups...");
+      
+      // Liste aller Backup-Dateien im Git Repository
+      const files = fs.readdirSync(this.gitBackupPath)
+        .filter(file => file.endsWith('.sql') || file.endsWith('.sql.gz'))
+        .map(file => {
+          const filePath = path.join(this.gitBackupPath, file);
+          const stats = fs.statSync(filePath);
+          return {
+            filename: file,
+            path: filePath,
+            created: stats.birthtime
+          };
+        })
+        .sort((a, b) => a.created - b.created);
+
+      const maxBackups = this.config.backup.maxBackups || 10;
+      
+      if (files.length > maxBackups) {
+        const filesToDelete = files.slice(0, files.length - maxBackups);
+        
+        console.log(`🗑️  Lösche ${filesToDelete.length} alte Backup(s) aus Git Repository...`);
+        
+        for (const fileToDelete of filesToDelete) {
+          console.log(`   - Lösche: ${fileToDelete.filename}`);
+          
+          // Datei löschen
+          fs.unlinkSync(fileToDelete.path);
+          
+          // Git operations
+          await this.execPromise(`cd "${this.gitBackupPath}" && git add "${fileToDelete.filename}"`);
+        }
+        
+        if (filesToDelete.length > 0) {
+          const commitMessage = `Cleanup: Remove ${filesToDelete.length} old backup(s) (${new Date().toLocaleString('de-DE')})`;
+          await this.execPromise(`cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`);
+          
+          const branch = this.config.gitBackup.branch || "main";
+          await this.execPromise(`cd "${this.gitBackupPath}" && git push origin ${branch}`, 30000);
+          
+          console.log(`✅ ${filesToDelete.length} alte Backup(s) aus Git Repository entfernt`);
+        }
+      } else {
+        console.log("✅ Git Repository Cleanup nicht erforderlich");
+      }
+      
+    } catch (error) {
+      console.error("❌ Fehler beim Git Repository Cleanup:", error);
+    }
   }
 
   // Auto-Update Funktion
@@ -235,7 +431,90 @@ class DatabaseBackupTool {
       }
     });
 
-    // System Info Route
+    // Git Backup Konfiguration Routes
+    this.app.get("/api/git-backup/config", authMiddleware, (req, res) => {
+      const config = {
+        enabled: this.config.gitBackup?.enabled || false,
+        repository: this.config.gitBackup?.repository || "",
+        username: this.config.gitBackup?.username || "",
+        hasToken: !!(this.config.gitBackup?.token),
+        branch: this.config.gitBackup?.branch || "main"
+      };
+      res.json(config);
+    });
+
+    this.app.post("/api/git-backup/config", authMiddleware, async (req, res) => {
+      try {
+        const { enabled, repository, username, token, branch } = req.body;
+        
+        // Konfiguration aktualisieren
+        this.config.gitBackup = {
+          enabled: enabled === true,
+          repository: repository || "",
+          username: username || "",
+          token: token || this.config.gitBackup?.token || "",
+          branch: branch || "main"
+        };
+        
+        // config.json aktualisieren
+        const configToSave = { ...this.config };
+        // Token aus gespeicherter Konfiguration entfernen (nur in Umgebungsvariablen)
+        if (configToSave.gitBackup) {
+          delete configToSave.gitBackup.token;
+        }
+        
+        fs.writeFileSync("config.json", JSON.stringify(configToSave, null, 2));
+        
+        // Git Backup neu initialisieren falls aktiviert
+        if (enabled) {
+          await this.initializeGitBackup();
+        }
+        
+        res.json({ 
+          message: "Git Backup Konfiguration gespeichert",
+          needsRestart: "⚠️ Für die Anwendung des Tokens ist ein Server-Neustart erforderlich"
+        });
+      } catch (error) {
+        console.error("Fehler beim Speichern der Git Backup Konfiguration:", error);
+        res.status(500).json({ error: "Fehler beim Speichern: " + error.message });
+      }
+    });
+
+    this.app.post("/api/git-backup/test", authMiddleware, async (req, res) => {
+      try {
+        if (!this.config.gitBackup?.enabled) {
+          return res.status(400).json({ error: "Git Backup ist nicht aktiviert" });
+        }
+        
+        // Test-Datei erstellen
+        const testFilename = `test_${Date.now()}.txt`;
+        const testContent = `Git Backup Test\nErstellt am: ${new Date().toLocaleString('de-DE')}\n`;
+        const testFilePath = path.join(this.gitBackupPath, testFilename);
+        
+        fs.writeFileSync(testFilePath, testContent);
+        
+        // Git operations testen
+        await this.execPromise(`cd "${this.gitBackupPath}" && git add "${testFilename}"`);
+        const commitMessage = `Test: ${testFilename}`;
+        await this.execPromise(`cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`);
+        
+        const branch = this.config.gitBackup.branch || "main";
+        await this.execPromise(`cd "${this.gitBackupPath}" && git push origin ${branch}`, 15000);
+        
+        // Test-Datei wieder entfernen
+        fs.unlinkSync(testFilePath);
+        await this.execPromise(`cd "${this.gitBackupPath}" && git add "${testFilename}"`);
+        await this.execPromise(`cd "${this.gitBackupPath}" && git commit -m "Remove test file: ${testFilename}"`);
+        await this.execPromise(`cd "${this.gitBackupPath}" && git push origin ${branch}`, 15000);
+        
+        res.json({ message: "✅ Git Backup Test erfolgreich! Repository ist erreichbar und beschreibbar." });
+      } catch (error) {
+        console.error("Git Backup Test fehlgeschlagen:", error);
+        res.status(500).json({ error: "Git Backup Test fehlgeschlagen: " + error.message });
+      }
+    });
+
+    // System Info Route (erweitert um Git Backup Info)
     this.app.get("/api/system", authMiddleware, (req, res) => {
       const packageInfo = JSON.parse(fs.readFileSync("package.json", "utf8"));
 
@@ -258,6 +537,11 @@ class DatabaseBackupTool {
             branch: this.updateBranch, // Fest integriert
             nodeVersion: process.version,
             uptime: process.uptime(),
+            gitBackup: {
+              enabled: this.config.gitBackup?.enabled || false,
+              repository: this.config.gitBackup?.repository || "",
+              hasCredentials: !!(this.config.gitBackup?.username && this.config.gitBackup?.token)
+            }
           });
         });
       });
@@ -423,58 +707,84 @@ class DatabaseBackupTool {
     const filename = `scheduled_${safeDatabaseName}_${timestamp}.sql`;
     const backupPath = path.join(this.config.backup.defaultPath, filename);
 
-    switch (dbConfig.type) {
-      case "mysql":
-        await mysqldump({
-          connection: {
-            host: dbConfig.host,
-            port: parseInt(dbConfig.port) || 3306,
-            user: dbConfig.username,
-            password: dbConfig.password,
-            database: dbConfig.database,
-          },
-          dumpToFile: backupPath,
-        });
-        break;
+    try {
+      switch (dbConfig.type) {
+        case "mysql":
+          await mysqldump({
+            connection: {
+              host: dbConfig.host,
+              port: parseInt(dbConfig.port) || 3306,
+              user: dbConfig.username,
+              password: dbConfig.password,
+              database: dbConfig.database,
+            },
+            dumpToFile: backupPath,
+          });
+          break;
 
-      case "postgresql":
-        const pgCommand = `PGPASSWORD=${dbConfig.password} pg_dump -h ${
-          dbConfig.host
-        } -p ${dbConfig.port || 5432} -U ${dbConfig.username} -d ${
-          dbConfig.database
-        } > ${backupPath}`;
-        await this.execPromise(pgCommand);
-        break;
+        case "postgresql":
+          const pgCommand = `PGPASSWORD=${dbConfig.password} pg_dump -h ${
+            dbConfig.host
+          } -p ${dbConfig.port || 5432} -U ${dbConfig.username} -d ${
+            dbConfig.database
+          } > ${backupPath}`;
+          await this.execPromise(pgCommand);
+          break;
 
-      case "mongodb":
-        const mongoBackupDir = path.join(
-          this.config.backup.defaultPath,
-          `scheduled_${safeDatabaseName}_${timestamp}`
-        );
-        const mongoCommand = `mongodump --host ${dbConfig.host}:${
-          dbConfig.port || 27017
-        } --db ${dbConfig.database} --username ${
-          dbConfig.username
-        } --password ${dbConfig.password} --out ${mongoBackupDir}`;
-        await this.execPromise(mongoCommand);
-        break;
+        case "mongodb":
+          const mongoBackupDir = path.join(
+            this.config.backup.defaultPath,
+            `scheduled_${safeDatabaseName}_${timestamp}`
+          );
+          const mongoCommand = `mongodump --host ${dbConfig.host}:${
+            dbConfig.port || 27017
+          } --db ${dbConfig.database} --username ${
+            dbConfig.username
+          } --password ${dbConfig.password} --out ${mongoBackupDir}`;
+          await this.execPromise(mongoCommand);
+          
+          // MongoDB Backups sind Verzeichnisse, können nicht direkt zu Git gepusht werden
+          // TODO: Implementiere Komprimierung für MongoDB vor Git Push
+          break;
+      }
+
+      let finalBackupPath = backupPath;
+
+      // Komprimierung wenn aktiviert
+      if (this.config.backup.compression && dbConfig.type !== "mongodb") {
+        await this.execPromise(`gzip ${backupPath}`);
+        finalBackupPath = `${backupPath}.gz`;
+      }
+
+      // Git Push ausführen (nur für Dateien, nicht für MongoDB Verzeichnisse)
+      if (dbConfig.type !== "mongodb" && fs.existsSync(finalBackupPath)) {
+        try {
+          await this.pushBackupToGit(finalBackupPath, path.basename(finalBackupPath));
+        } catch (gitError) {
+          console.error(`⚠️  Git Push für geplantes Backup fehlgeschlagen: ${gitError.message}`);
+        }
+      }
+
+      // Alte Backups aufräumen
+      this.cleanupOldBackups();
+      
+    } catch (error) {
+      console.error(`❌ Fehler beim geplanten Backup: ${error.message}`);
+      throw error;
     }
-
-    // Komprimierung wenn aktiviert
-    if (this.config.backup.compression && dbConfig.type !== "mongodb") {
-      await this.execPromise(`gzip ${backupPath}`);
-    }
-
-    // Alte Backups aufräumen
-    this.cleanupOldBackups();
   }
 
   // Hilfsmethode: exec als Promise
-  execPromise(command) {
+  execPromise(command, timeout = 5000) {
     return new Promise((resolve, reject) => {
+      const execTimeout = setTimeout(() => {
+        reject(new Error(`Command timeout after ${timeout}ms: ${command}`));
+      }, timeout);
+      
       exec(command, (error, stdout, stderr) => {
+        clearTimeout(execTimeout);
         if (error) {
-          reject(error);
+          reject(new Error(`Command failed: ${command}\nError: ${error.message}\nStderr: ${stderr}`));
         } else {
           resolve(stdout);
         }
@@ -492,7 +802,8 @@ class DatabaseBackupTool {
             file.endsWith(".sql") ||
             file.endsWith(".sql.gz") ||
             (!file.includes(".") &&
-              fs.statSync(path.join(backupDir, file)).isDirectory())
+              fs.statSync(path.join(backupDir, file)).isDirectory() &&
+              file !== "git-backup") // Git-Backup Verzeichnis ausschließen
         );
 
       const backups = files
@@ -558,23 +869,34 @@ class DatabaseBackupTool {
             dumpToFile: backupPath,
           });
 
+          let finalPath = backupPath;
+
           // Komprimierung wenn aktiviert
           if (this.config.backup.compression) {
             const compressedPath = backupPath + ".gz";
-            exec("/bin/gzip " + backupPath, (compressError) => {
-              if (compressError) {
-                console.error("Komprimierung fehlgeschlagen:", compressError);
-              }
-            });
+            await this.execPromise(`gzip ${backupPath}`);
+            finalPath = compressedPath;
+          }
+
+          // Git Push versuchen
+          let gitPushSuccess = false;
+          if (this.config.gitBackup?.enabled) {
+            try {
+              await this.pushBackupToGit(finalPath, path.basename(finalPath));
+              gitPushSuccess = true;
+            } catch (gitError) {
+              console.error("Git Push fehlgeschlagen:", gitError);
+            }
           }
 
           // Alte Backups aufräumen
           this.cleanupOldBackups();
 
           return res.json({
-            message: "Backup erfolgreich erstellt",
-            filename: path.basename(backupPath),
-            path: backupPath,
+            message: "Backup erfolgreich erstellt" + (gitPushSuccess ? " und zu Git gepusht" : ""),
+            filename: path.basename(finalPath),
+            path: finalPath,
+            gitPushed: gitPushSuccess
           });
 
         case "postgresql":
@@ -592,7 +914,7 @@ class DatabaseBackupTool {
             " > " +
             backupPath;
 
-          exec(pgCommand, (error, stdout, stderr) => {
+          exec(pgCommand, async (error, stdout, stderr) => {
             if (error) {
               console.error("Backup Fehler:", error);
               console.error("stderr:", stderr);
@@ -601,20 +923,35 @@ class DatabaseBackupTool {
                 .json({ error: "Backup fehlgeschlagen: " + error.message });
             }
 
+            let finalPath = backupPath;
+
             if (this.config.backup.compression) {
-              exec("/bin/gzip " + backupPath, (compressError) => {
-                if (compressError) {
-                  console.error("Komprimierung fehlgeschlagen:", compressError);
-                }
-              });
+              try {
+                await this.execPromise(`gzip ${backupPath}`);
+                finalPath = backupPath + ".gz";
+              } catch (compressError) {
+                console.error("Komprimierung fehlgeschlagen:", compressError);
+              }
+            }
+
+            // Git Push versuchen
+            let gitPushSuccess = false;
+            if (this.config.gitBackup?.enabled) {
+              try {
+                await this.pushBackupToGit(finalPath, path.basename(finalPath));
+                gitPushSuccess = true;
+              } catch (gitError) {
+                console.error("Git Push fehlgeschlagen:", gitError);
+              }
             }
 
             this.cleanupOldBackups();
 
             res.json({
-              message: "Backup erfolgreich erstellt",
-              filename: filename,
-              path: backupPath,
+              message: "Backup erfolgreich erstellt" + (gitPushSuccess ? " und zu Git gepusht" : ""),
+              filename: path.basename(finalPath),
+              path: finalPath,
+              gitPushed: gitPushSuccess
             });
           });
           break;
@@ -647,13 +984,17 @@ class DatabaseBackupTool {
                 .json({ error: "Backup fehlgeschlagen: " + error.message });
             }
 
-            // Kompression nicht erforderlich – MongoDB speichert als Verzeichnis
+            // MongoDB Backups sind Verzeichnisse - Git Push momentan nicht unterstützt
+            // TODO: Implementiere TAR/ZIP Komprimierung für MongoDB vor Git Push
+            
             this.cleanupOldBackups();
 
             res.json({
-              message: "Backup erfolgreich erstellt",
+              message: "Backup erfolgreich erstellt (MongoDB Verzeichnis - Git Push nicht verfügbar)",
               filename: path.basename(mongoBackupDir),
               path: mongoBackupDir,
+              gitPushed: false,
+              note: "MongoDB Backups werden als Verzeichnisse gespeichert und können derzeit nicht automatisch zu Git gepusht werden."
             });
           });
           break;
@@ -813,10 +1154,11 @@ class DatabaseBackupTool {
         .readdirSync(backupDir)
         .filter(
           (file) =>
-            file.endsWith(".sql") ||
+            (file.endsWith(".sql") ||
             file.endsWith(".sql.gz") ||
             (!file.includes(".") &&
-              fs.statSync(path.join(backupDir, file)).isDirectory())
+              fs.statSync(path.join(backupDir, file)).isDirectory())) &&
+            file !== "git-backup" // Git-Backup Verzeichnis ausschließen
         );
 
       if (files.length > this.config.backup.maxBackups) {
@@ -870,6 +1212,17 @@ class DatabaseBackupTool {
       );
       console.log("📦 Offizielles Repository: " + this.updateRepository);
       console.log("🔗 Branch: " + this.updateBranch);
+      
+      // Git Backup Status
+      if (this.config.gitBackup?.enabled) {
+        console.log("📤 Git Backup: Aktiviert");
+        console.log("📦 Git Repository: " + (this.config.gitBackup.repository || "Nicht konfiguriert"));
+        console.log("🔗 Git Branch: " + (this.config.gitBackup.branch || "main"));
+        console.log("📁 Git Backup Pfad: " + this.gitBackupPath);
+      } else {
+        console.log("📤 Git Backup: Deaktiviert");
+      }
+      
       console.log("");
       console.log(
         "⚠️  WICHTIG: Ändere die Standard-Passwörter nach dem ersten Login!"

@@ -1,4 +1,4 @@
-/* Database Backup Tool - Styles */
+/* Database Backup Tool - Enhanced Styles mit Git Backup */
 
 /* Reset & Base Styles */
 * {
@@ -73,6 +73,13 @@ label {
     color: #34495e;
 }
 
+/* Checkbox Labels */
+label input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+    margin-bottom: 0;
+}
+
 input, select {
     width: 100%;
     padding: 10px;
@@ -93,6 +100,7 @@ small {
     margin-top: 5px;
     color: #7f8c8d;
     font-size: 12px;
+    line-height: 1.4;
 }
 
 /* Buttons */
@@ -311,6 +319,83 @@ button:active {
     color: #27ae60;
 }
 
+/* Git Backup Specific Styles */
+.git-backup-info {
+    background: #e8f4fd;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+    margin-bottom: 20px;
+}
+
+.git-backup-info h4 {
+    color: #3498db;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.git-backup-info p {
+    font-size: 0.9em;
+    color: #555;
+    margin: 5px 0;
+}
+
+.git-backup-info ul {
+    margin-left: 20px;
+    margin-top: 10px;
+}
+
+.git-backup-info li {
+    margin: 5px 0;
+    font-size: 0.9em;
+    color: #555;
+}
+
+/* Git Config Fields */
+.git-config-field {
+    transition: all 0.3s ease;
+}
+
+/* Help Sections */
+.git-backup-help {
+    border-top: 2px solid #ecf0f1;
+    padding-top: 20px;
+}
+
+.help-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border-left: 4px solid #95a5a6;
+}
+
+.help-section h5 {
+    margin-bottom: 10px;
+    color: #2c3e50;
+    font-size: 1em;
+}
+
+.help-section ol, .help-section ul {
+    margin-left: 20px;
+}
+
+.help-section li {
+    margin: 5px 0;
+    font-size: 0.9em;
+    color: #555;
+    line-height: 1.4;
+}
+
+.help-section code {
+    background: #ecf0f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    color: #e74c3c;
+}
+
 /* Messages */
 .error {
     color: #e74c3c;
@@ -328,6 +413,26 @@ button:active {
     padding: 10px;
     background: #f0f9f0;
     border: 1px solid #c3e6cb;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.warning {
+    color: #f39c12;
+    margin-top: 10px;
+    padding: 10px;
+    background: #fef9e7;
+    border: 1px solid #faebcc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.info {
+    color: #3498db;
+    margin-top: 10px;
+    padding: 10px;
+    background: #e8f4fd;
+    border: 1px solid #bee5eb;
     border-radius: 4px;
     font-size: 14px;
 }
@@ -373,6 +478,14 @@ button:active {
         margin: 20px auto;
         padding: 20px;
     }
+    
+    .help-section ol, .help-section ul {
+        margin-left: 15px;
+    }
+    
+    .git-backup-info ul {
+        margin-left: 15px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -395,6 +508,22 @@ button:active {
     .backup-item button {
         width: 100%;
         margin: 2px 0;
+    }
+    
+    .help-section {
+        padding: 10px;
+    }
+    
+    .git-backup-info {
+        padding: 10px;
+    }
+    
+    .repo-info {
+        padding: 10px;
+    }
+    
+    .system-info {
+        padding: 10px;
     }
 }
 
@@ -422,6 +551,20 @@ button:active {
     to { transform: rotate(360deg); }
 }
 
+/* Animation für Git Config Fields */
+.git-config-field {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.git-config-field[style*="display: block"] {
+    opacity: 1;
+    max-height: 200px;
+    margin-bottom: 15px;
+}
+
 /* Utility Classes */
 .text-center {
     text-align: center;
@@ -441,4 +584,27 @@ button:active {
 
 .hidden {
     display: none !important;
+}
+
+/* Special button styles for Git functions */
+button[onclick*="testGitBackup"] {
+    background: #f39c12;
+}
+
+button[onclick*="testGitBackup"]:hover {
+    background: #e67e22;
+}
+
+/* Enhanced status displays */
+#git-backup-status {
+    font-size: 0.9em;
+}
+
+#git-backup-status span {
+    font-weight: bold;
+}
+
+#git-backup-status small {
+    color: #666;
+    font-style: italic;
 }

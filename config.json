@@ -24,5 +24,11 @@
     "autoUpdate": true,
     "repository": "https://github.com/brandy2307/db-backup-tool.git",
     "branch": "main"
+  },
+  "gitBackup": {
+    "enabled": false,
+    "repository": "",
+    "username": "",
+    "branch": "main"
   }
 }
