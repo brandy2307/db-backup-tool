@@ -2,13 +2,13 @@
   "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL",
   "meta": {
     "version": "PTDL_v2",
-    "update_url": null
+    "update_url": "https://github.com/brandy2307/db-backup-tool/blob/2ecc5011ab4e13b03d8fe37c8483efc70d00d43a/dbtool-egg.json"
   },
   "exported_at": "2024-06-02T14:40:56+00:00",
   "name": "DB Backup Tool (Environment Fix)",
-  "author": "admin@example.com",
+  "author": "brandy@example.com",
   "uuid": "db9f372e-01d7-4c9b-a109-e49990d68d46",
-  "description": "Fixed version using environment variables",
+  "description": "Tool for automated Backups of Databases",
   "features": null,
   "docker_images": {
     "ghcr.io/parkervcp/yolks:nodejs_18": "ghcr.io/parkervcp/yolks:nodejs_18"
@@ -17,7 +17,7 @@
   "startup": "cd /home/container && if [ ! -f \"db-backup-tool/package.json\" ]; then echo \"ERROR: package.json not found. Please reinstall the server.\"; exit 1; fi && cd db-backup-tool && npm start",
   "config": {
     "files": "{\r\n    \"db-backup-tool/config.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"server.port\": \"{{server.build.default.port}}\",\r\n            \"server.host\": \"0.0.0.0\"\r\n        }\r\n    }\r\n}",
-    "startup": "{\r\n    \"done\": \"Server läuft auf Port\"\r\n}",
+    "startup": "{\r\n    \"done\": \"Server running on Port:\"\r\n}",
     "logs": "{}",
     "stop": "^C"
   },
