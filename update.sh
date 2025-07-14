@@ -1,5 +1,5 @@
 #!/bin/bash
-# Auto-Update Script für offizielles Repository
+# Auto-Update Script für offizielles Repository mit Frontend-Unterstützung
 # Dieses Script wird automatisch vom DB Backup Tool verwendet
 
 set -e
@@ -55,6 +55,17 @@ if [ -d "backups" ] && [ "$(ls -A backups)" ]; then
     echo "✅ Backup-Ordner gesichert"
 fi
 
+# Backup von benutzerdefinierten Frontend-Dateien (falls vorhanden)
+if [ -f "public/custom.css" ]; then
+    cp public/custom.css "$BACKUP_DIR/custom.css"
+    echo "✅ Benutzerdefinierte CSS-Datei gesichert"
+fi
+
+if [ -f "public/custom.js" ]; then
+    cp public/custom.js "$BACKUP_DIR/custom.js"
+    echo "✅ Benutzerdefinierte JS-Datei gesichert"
+fi
+
 # Git Update vom offiziellen Repository
 echo "🔍 Prüfe auf Updates..."
 git fetch origin
@@ -104,9 +115,48 @@ if [ "$LOCAL" != "$REMOTE" ]; then
         echo "✅ Backup-Ordner wiederhergestellt"
     fi
     
+    # Benutzerdefinierte Frontend-Dateien wiederherstellen
+    if [ -f "$BACKUP_DIR/custom.css" ]; then
+        mv "$BACKUP_DIR/custom.css" public/custom.css
+        echo "✅ Benutzerdefinierte CSS-Datei wiederhergestellt"
+    fi
+    
+    if [ -f "$BACKUP_DIR/custom.js" ]; then
+        mv "$BACKUP_DIR/custom.js" public/custom.js
+        echo "✅ Benutzerdefinierte JS-Datei wiederhergestellt"
+    fi
+    
+    # Frontend-Dateien prüfen und ggf. erstellen
+    echo "🎨 Prüfe Frontend-Dateien..."
+    
+    # Prüfe ob alle erforderlichen Frontend-Dateien vorhanden sind
+    FRONTEND_FILES=(
+        "public/index.html"
+        "public/styles.css"
+        "public/app.js"
+    )
+    
+    MISSING_FILES=()
+    for file in "${FRONTEND_FILES[@]}"; do
+        if [ ! -f "$file" ]; then
+            MISSING_FILES+=("$file")
+        fi
+    done
+    
+    if [ ${#MISSING_FILES[@]} -gt 0 ]; then
+        echo "⚠️  Fehlende Frontend-Dateien erkannt:"
+        for file in "${MISSING_FILES[@]}"; do
+            echo "   - $file"
+        done
+        echo "ℹ️  Stelle sicher, dass alle Frontend-Dateien im Repository vorhanden sind"
+    else
+        echo "✅ Alle Frontend-Dateien vorhanden"
+    fi
+    
     # Berechtigungen setzen
     chmod +x update.sh
     chmod 755 backups logs config public 2>/dev/null || true
+    chmod 644 public/*.html public/*.css public/*.js 2>/dev/null || true
     
     echo "✅ Update erfolgreich abgeschlossen!"
     echo "📋 Neue Version: $(git rev-parse --short HEAD)"
@@ -121,7 +171,7 @@ fi
 echo "🧹 Räume temporäre Dateien auf..."
 rm -rf "$BACKUP_DIR"
 
-# Zeige aktuelle Git-Informationen
+# Zeige aktuelle Git-Informationen und Dateistruktur
 echo "================================="
 echo "📊 AKTUELLE INSTALLATION"
 echo "================================="
@@ -131,6 +181,33 @@ echo "Commit: $(git rev-parse --short HEAD)"
 echo "Datum: $(git log -1 --format=%ci)"
 echo "Node.js: $(node --version)"
 echo "NPM: $(npm --version)"
+echo ""
+echo "📁 Dateistruktur:"
+echo "├── server.js $([ -f "server.js" ] && echo "✅" || echo "❌")"
+echo "├── package.json $([ -f "package.json" ] && echo "✅" || echo "❌")"
+echo "├── config.json $([ -f "config.json" ] && echo "✅" || echo "❌")"
+echo "├── update.sh $([ -f "update.sh" ] && echo "✅" || echo "❌")"
+echo "└── public/"
+echo "    ├── index.html $([ -f "public/index.html" ] && echo "✅" || echo "❌")"
+echo "    ├── styles.css $([ -f "public/styles.css" ] && echo "✅" || echo "❌")"
+echo "    ├── app.js $([ -f "public/app.js" ] && echo "✅" || echo "❌")"
+echo "    ├── custom.css $([ -f "public/custom.css" ] && echo "📝" || echo "⚪")"
+echo "    └── custom.js $([ -f "public/custom.js" ] && echo "📝" || echo "⚪")"
+echo ""
+echo "📂 Verzeichnisse:"
+echo "├── backups/ $([ -d "backups" ] && echo "✅" || echo "❌")"
+echo "├── logs/ $([ -d "logs" ] && echo "✅" || echo "❌")"
+echo "└── config/ $([ -d "config" ] && echo "✅" || echo "❌")"
+echo ""
+echo "Legende: ✅ Vorhanden | ❌ Fehlt | 📝 Benutzerdefiniert | ⚪ Optional"
 echo "================================="
 
 echo "🎉 Update-Prozess abgeschlossen!"
+
+# Kurze Anleitung für Frontend-Anpassungen
+echo ""
+echo "💡 TIPP: Frontend-Anpassungen"
+echo "Erstelle optional diese Dateien für eigene Anpassungen:"
+echo "├── public/custom.css  - Für eigene CSS-Styles"
+echo "└── public/custom.js   - Für eigene JavaScript-Funktionen"
+echo "Diese Dateien werden bei Updates automatisch gesichert!"

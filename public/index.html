@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Backup Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Database Backup Tool</h1>
+        <p>Automatisierte Datenbank-Backups für MySQL, PostgreSQL und MongoDB</p>
+    </div>
+
+    <div class="container">
+        <div id="login-section">
+            <div class="login-form">
+                <h2>Anmeldung</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">Benutzername:</label>
+                        <input type="text" id="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Passwort:</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <button type="submit">Anmelden</button>
+                </form>
+                <div id="loginError" class="error"></div>
+            </div>
+        </div>
+
+        <div id="main-content" class="main-content">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('backup')">Backup erstellen</button>
+                <button class="tab" onclick="showTab('backups')">Backups verwalten</button>
+                <button class="tab" onclick="showTab('schedule')">Zeitplan</button>
+                <button class="tab" onclick="showTab('system')">System</button>
+            </div>
+
+            <div id="backup-content" class="tab-content active">
+                <h2>Neues Backup erstellen</h2>
+                <form id="backupForm" class="backup-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dbType">Datenbanktyp:</label>
+                            <select id="dbType" required>
+                                <option value="">Wähle Typ...</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="postgresql">PostgreSQL</option>
+                                <option value="mongodb">MongoDB</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dbHost">Host:</label>
+                            <input type="text" id="dbHost" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dbPort">Port:</label>
+                            <input type="number" id="dbPort">
+                        </div>
+                        <div class="form-group">
+                            <label for="dbName">Datenbankname:</label>
+                            <input type="text" id="dbName" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dbUsername">Benutzername:</label>
+                            <input type="text" id="dbUsername" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="dbPassword">Passwort:</label>
+                            <input type="password" id="dbPassword" required>
+                        </div>
+                    </div>
+                    <button type="submit">Backup erstellen</button>
+                </form>
+                <div id="backupResult"></div>
+            </div>
+
+            <div id="backups-content" class="tab-content">
+                <h2>Backup-Verwaltung</h2>
+                <button onclick="loadBackups()">Aktualisieren</button>
+                <div id="backupsList" class="backup-list"></div>
+            </div>
+
+            <div id="schedule-content" class="tab-content">
+                <h2>Backup-Zeitpläne</h2>
+                <form id="scheduleForm" class="backup-form">
+                    <div class="form-group">
+                        <label for="scheduleName">Name:</label>
+                        <input type="text" id="scheduleName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cronExpression">Cron-Expression:</label>
+                        <input type="text" id="cronExpression" placeholder="0 2 * * *" required>
+                        <small>Beispiel: "0 2 * * *" = täglich um 2:00 Uhr</small>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="scheduleDbType">Datenbanktyp:</label>
+                            <select id="scheduleDbType" required>
+                                <option value="">Wähle Typ...</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="postgresql">PostgreSQL</option>
+                                <option value="mongodb">MongoDB</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleDbHost">Host:</label>
+                            <input type="text" id="scheduleDbHost" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="scheduleDbPort">Port:</label>
+                            <input type="number" id="scheduleDbPort">
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleDbName">Datenbankname:</label>
+                            <input type="text" id="scheduleDbName" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="scheduleDbUsername">Benutzername:</label>
+                            <input type="text" id="scheduleDbUsername" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleDbPassword">Passwort:</label>
+                            <input type="password" id="scheduleDbPassword" required>
+                        </div>
+                    </div>
+                    <button type="submit">Zeitplan erstellen</button>
+                </form>
+                <div id="scheduleResult"></div>
+                <div id="schedulesList" class="backup-list"></div>
+            </div>
+
+            <div id="system-content" class="tab-content">
+                <h2>System-Informationen</h2>
+                
+                <div class="repo-info">
+                    <h4>🔄 Offizielles Update-Repository</h4>
+                    <p><strong>Repository:</strong> <span id="repo-url">Lade...</span></p>
+                    <p><strong>Branch:</strong> <span id="repo-branch">Lade...</span></p>
+                    <p><strong>Updates:</strong> Automatisch vom offiziellen Repository</p>
+                </div>
+                
+                <div id="systemInfo" class="system-info">
+                    <h3>Lädt System-Informationen...</h3>
+                </div>
+                <button onclick="manualUpdate()" class="update-button">Manuelles Update</button>
+                <div id="updateResult"></div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button onclick="logout()">Abmelden</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
