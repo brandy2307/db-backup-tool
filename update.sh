@@ -1,5 +1,5 @@
 #!/bin/bash
-# Auto-Update Script für offizielles Repository mit Frontend-Unterstützung
+# Auto-Update Script für offizielles Repository mit Frontend-Unterstützung und automatischer Berechtigungsreparatur
 # Dieses Script wird automatisch vom DB Backup Tool verwendet
 
 set -e
@@ -15,6 +15,68 @@ echo "📦 Offizielles Repository: ${REPO_URL}"
 echo "🔗 Branch: ${REPO_BRANCH}"
 echo "📁 Verzeichnis: $(pwd)"
 echo "================================="
+
+# Funktion: Berechtigungen setzen
+fix_permissions() {
+    echo "🔧 Setze korrekte Berechtigungen..."
+    
+    # Hauptverzeichnis
+    chmod 755 . 2>/dev/null || true
+    
+    # Ausführbare Dateien
+    chmod +x update.sh 2>/dev/null || true
+    chmod +x server.js 2>/dev/null || true
+    
+    # Konfigurationsdateien (lesbar/schreibbar)
+    chmod 644 *.json 2>/dev/null || true
+    chmod 644 *.js 2>/dev/null || true
+    chmod 644 *.md 2>/dev/null || true
+    
+    # Verzeichnisse (ausführbar für Navigation)
+    chmod 755 backups 2>/dev/null || true
+    chmod 755 logs 2>/dev/null || true
+    chmod 755 config 2>/dev/null || true
+    chmod 755 public 2>/dev/null || true
+    
+    # Frontend-Dateien
+    chmod 644 public/*.html 2>/dev/null || true
+    chmod 644 public/*.css 2>/dev/null || true
+    chmod 644 public/*.js 2>/dev/null || true
+    
+    # Git-Dateien
+    chmod 644 .gitattributes 2>/dev/null || true
+    
+    # NPM/Node-spezifische Dateien
+    chmod 644 package*.json 2>/dev/null || true
+    
+    echo "✅ Berechtigungen gesetzt"
+}
+
+# Funktion: Verzeichnisstruktur prüfen und erstellen
+ensure_directories() {
+    echo "📁 Prüfe Verzeichnisstruktur..."
+    
+    # Wichtige Verzeichnisse erstellen
+    mkdir -p backups logs config public
+    
+    # Backup-Zeitpläne-Datei erstellen falls nicht vorhanden
+    if [ ! -f "backups/schedules.json" ]; then
+        echo "[]" > backups/schedules.json
+        echo "✅ schedules.json erstellt"
+    fi
+    
+    # .gitattributes erstellen falls nicht vorhanden
+    if [ ! -f ".gitattributes" ]; then
+        echo "* text=auto" > .gitattributes
+        echo "✅ .gitattributes erstellt"
+    fi
+    
+    echo "✅ Verzeichnisstruktur überprüft"
+}
+
+# Berechtigungen am Anfang setzen (falls das Script selbst keine Rechte hatte)
+echo "🔧 Erste Berechtigungsreparatur..."
+chmod +x "$0" 2>/dev/null || true
 
 # Prüfe ob wir in einem Git Repository sind
 if [ ! -d ".git" ]; then
@@ -85,6 +147,9 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     # Hard reset zum neuesten Stand
     git reset --hard origin/$REPO_BRANCH
     
+    # Berechtigungen sofort nach Git-Update setzen
+    fix_permissions
+    
     # Dependencies aktualisieren
     echo "📦 Aktualisiere Dependencies..."
     npm cache clean --force
@@ -93,8 +158,8 @@ if [ "$LOCAL" != "$REMOTE" ]; then
         npm install --production --legacy-peer-deps
     fi
     
-    # Stelle sicher, dass alle Verzeichnisse existieren
-    mkdir -p backups logs config public
+    # Verzeichnisse sicherstellen
+    ensure_directories
     
     # Konfigurationsdateien wiederherstellen
     echo "🔄 Stelle Konfigurationsdateien wieder her..."
@@ -153,10 +218,8 @@ if [ "$LOCAL" != "$REMOTE" ]; then
         echo "✅ Alle Frontend-Dateien vorhanden"
     fi
     
-    # Berechtigungen setzen
-    chmod +x update.sh
-    chmod 755 backups logs config public 2>/dev/null || true
-    chmod 644 public/*.html public/*.css public/*.js 2>/dev/null || true
+    # Finale Berechtigungsreparatur nach dem gesamten Update
+    fix_permissions
     
     echo "✅ Update erfolgreich abgeschlossen!"
     echo "📋 Neue Version: $(git rev-parse --short HEAD)"
@@ -165,6 +228,11 @@ if [ "$LOCAL" != "$REMOTE" ]; then
 else
     echo "✅ Bereits auf dem neuesten Stand!"
     echo "📋 Aktuelle Version: $(git rev-parse --short HEAD)"
+    
+    # Auch bei "kein Update" die Berechtigungen reparieren
+    echo "🔧 Repariere Berechtigungen (Wartung)..."
+    fix_permissions
+    ensure_directories
 fi
 
 # Cleanup der temporären Backup-Dateien
@@ -186,7 +254,7 @@ echo "📁 Dateistruktur:"
 echo "├── server.js $([ -f "server.js" ] && echo "✅" || echo "❌")"
 echo "├── package.json $([ -f "package.json" ] && echo "✅" || echo "❌")"
 echo "├── config.json $([ -f "config.json" ] && echo "✅" || echo "❌")"
-echo "├── update.sh $([ -f "update.sh" ] && echo "✅" || echo "❌")"
+echo "├── update.sh $([ -f "update.sh" ] && echo "✅" || echo "❌") $([ -x "update.sh" ] && echo "(🔓 ausführbar)" || echo "(🔒 nicht ausführbar)")"
 echo "└── public/"
 echo "    ├── index.html $([ -f "public/index.html" ] && echo "✅" || echo "❌")"
 echo "    ├── styles.css $([ -f "public/styles.css" ] && echo "✅" || echo "❌")"
@@ -199,10 +267,24 @@ echo "├── backups/ $([ -d "backups" ] && echo "✅" || echo "❌")"
 echo "├── logs/ $([ -d "logs" ] && echo "✅" || echo "❌")"
 echo "└── config/ $([ -d "config" ] && echo "✅" || echo "❌")"
 echo ""
-echo "Legende: ✅ Vorhanden | ❌ Fehlt | 📝 Benutzerdefiniert | ⚪ Optional"
+echo "🔧 Berechtigungen:"
+echo "├── update.sh: $(ls -l update.sh | cut -d' ' -f1)"
+echo "├── server.js: $(ls -l server.js | cut -d' ' -f1 2>/dev/null || echo "❌")"
+echo "└── public/: $(ls -ld public | cut -d' ' -f1 2>/dev/null || echo "❌")"
+echo ""
+echo "Legende: ✅ Vorhanden | ❌ Fehlt | 📝 Benutzerdefiniert | ⚪ Optional | 🔓 Ausführbar | 🔒 Nicht ausführbar"
 echo "================================="
 
 echo "🎉 Update-Prozess abgeschlossen!"
+echo "🔧 Alle Berechtigungen wurden automatisch repariert!"
+
+# Finale Validierung
+if [ -x "update.sh" ]; then
+    echo "✅ Update-Script ist korrekt ausführbar"
+else
+    echo "⚠️  Update-Script Berechtigungen konnten nicht gesetzt werden"
+    echo "   Führe manuell aus: chmod +x update.sh"
+fi
 
 # Kurze Anleitung für Frontend-Anpassungen
 echo ""
