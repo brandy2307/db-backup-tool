@@ -1,12 +1,13 @@
 /**
- * Database Backup Tool - Frontend JavaScript
- * Handles all client-side functionality
+ * Database Backup Tool - Frontend JavaScript (Enhanced mit Git Backup) - TEIL 1
+ * Handles all client-side functionality including Git Backup configuration
  */
 
-console.log('Database Backup Tool - Frontend wird geladen...');
+console.log('Database Backup Tool - Enhanced Frontend wird geladen...');
 
 // Global Variables
 let authToken = null;
+let gitBackupConfig = null;
 
 // DOM Content Loaded Event
 document.addEventListener('DOMContentLoaded', function() {
@@ -39,6 +40,12 @@ function initializeEventListeners() {
         scheduleForm.addEventListener('submit', handleScheduleSubmit);
     }
 
+    // Git Backup Form
+    const gitBackupForm = document.getElementById('gitBackupForm');
+    if (gitBackupForm) {
+        gitBackupForm.addEventListener('submit', handleGitBackupSubmit);
+    }
+
     // Database Type Changes
     const dbType = document.getElementById('dbType');
     if (dbType) {
@@ -48,6 +55,12 @@ function initializeEventListeners() {
     const scheduleDbType = document.getElementById('scheduleDbType');
     if (scheduleDbType) {
         scheduleDbType.addEventListener('change', handleScheduleDbTypeChange);
+    }
+
+    // Git Backup Toggle
+    const gitBackupEnabled = document.getElementById('gitBackupEnabled');
+    if (gitBackupEnabled) {
+        gitBackupEnabled.addEventListener('change', handleGitBackupToggle);
     }
 }
 
@@ -104,6 +117,7 @@ function loadInitialData() {
     loadBackups();
     loadSchedules();
     loadSystemInfo();
+    loadGitBackupConfig();
 }
 
 /**
@@ -137,7 +151,17 @@ async function handleBackupSubmit(e) {
         hideLoading('backupResult');
 
         if (response.ok) {
-            showSuccess('backupResult', data.message);
+            let message = data.message;
+            if (data.gitPushed) {
+                message += ' ✅ Git Push erfolgreich!';
+            } else if (gitBackupConfig?.enabled) {
+                message += ' ⚠️ Git Push fehlgeschlagen';
+            }
+            
+            showSuccess('backupResult', message);
+            if (data.note) {
+                showInfo('backupResult', data.note);
+            }
             loadBackups();
             // Clear sensitive data
             document.getElementById('dbPassword').value = '';
@@ -198,6 +222,132 @@ async function handleScheduleSubmit(e) {
 }
 
 /**
+ * Handle Git Backup form submission
+ */
+async function handleGitBackupSubmit(e) {
+    e.preventDefault();
+    
+    const gitData = {
+        enabled: document.getElementById('gitBackupEnabled').checked,
+        repository: document.getElementById('gitBackupRepository').value,
+        username: document.getElementById('gitBackupUsername').value,
+        token: document.getElementById('gitBackupToken').value,
+        branch: document.getElementById('gitBackupBranch').value || 'main'
+    };
+
+    try {
+        showLoading('gitBackupResult', 'Speichere Git Backup Konfiguration...');
+        
+        const response = await fetch('/api/git-backup/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + authToken
+            },
+            body: JSON.stringify(gitData)
+        });
+
+        const data = await response.json();
+        hideLoading('gitBackupResult');
+
+        if (response.ok) {
+            showSuccess('gitBackupResult', data.message);
+            if (data.needsRestart) {
+                showWarning('gitBackupResult', data.needsRestart);
+            }
+            loadGitBackupConfig();
+            loadSystemInfo();
+        } else {
+            showError('gitBackupResult', data.error);
+        }
+    } catch (error) {
+        hideLoading('gitBackupResult');
+        showError('gitBackupResult', 'Verbindungsfehler: ' + error.message);
+    }
+}
+
+/**
+ * Handle Git Backup toggle
+ */
+function handleGitBackupToggle(e) {
+    const enabled = e.target.checked;
+    const configFields = document.querySelectorAll('.git-config-field');
+    
+    configFields.forEach(field => {
+        field.style.display = enabled ? 'block' : 'none';
+    });
+    
+    // Test Button anzeigen/verstecken
+    const testButton = document.getElementById('testGitBackup');
+    if (testButton) {
+        testButton.style.display = enabled ? 'inline-block' : 'none';
+    }
+}
+
+/**
+ * Test Git Backup connection
+ */
+async function testGitBackup() {
+    try {
+        showLoading('gitBackupResult', 'Teste Git Backup Verbindung...');
+        
+        const response = await fetch('/api/git-backup/test', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+
+        const data = await response.json();
+        hideLoading('gitBackupResult');
+
+        if (response.ok) {
+            showSuccess('gitBackupResult', data.message);
+        } else {
+            showError('gitBackupResult', data.error);
+        }
+    } catch (error) {
+        hideLoading('gitBackupResult');
+        showError('gitBackupResult', 'Verbindungsfehler: ' + error.message);
+    }
+}
+
+/**
+ * Load Git Backup configuration
+ */
+async function loadGitBackupConfig() {
+    try {
+        const response = await fetch('/api/git-backup/config', {
+            headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+
+        if (response.ok) {
+            gitBackupConfig = await response.json();
+            
+            // Formular ausfüllen
+            document.getElementById('gitBackupEnabled').checked = gitBackupConfig.enabled;
+            document.getElementById('gitBackupRepository').value = gitBackupConfig.repository;
+            document.getElementById('gitBackupUsername').value = gitBackupConfig.username;
+            document.getElementById('gitBackupBranch').value = gitBackupConfig.branch;
+            
+            // Token-Feld - zeige nur ob vorhanden
+            const tokenField = document.getElementById('gitBackupToken');
+            if (gitBackupConfig.hasToken) {
+                tokenField.placeholder = '••••••••••••••••••••••••••••••••••••••••';
+            } else {
+                tokenField.placeholder = 'Personal Access Token oder App Password';
+            }
+            
+            // Toggle Event auslösen
+            handleGitBackupToggle({ target: { checked: gitBackupConfig.enabled } });
+            
+        } else {
+            console.error('Fehler beim Laden der Git Backup Konfiguration');
+        }
+    } catch (error) {
+        console.error('Git Backup Config Fehler:', error);
+    }
+}
+
+/**
  * Handle database type change for backup form
  */
 function handleDbTypeChange(e) {
@@ -236,6 +386,10 @@ function handleScheduleDbTypeChange(e) {
             portField.value = '';
     }
 }
+/**
+ * Database Backup Tool - Frontend JavaScript (Enhanced mit Git Backup) - TEIL 2
+ * Data Loading Functions und Utility Functions
+ */
 
 /**
  * Load backups list
@@ -352,6 +506,20 @@ async function loadSystemInfo() {
             // Update repository info in the fixed section
             document.getElementById('repo-url').textContent = systemInfo.repository;
             document.getElementById('repo-branch').textContent = systemInfo.branch;
+            
+            // Update Git Backup status
+            const gitBackupStatus = document.getElementById('git-backup-status');
+            if (gitBackupStatus) {
+                if (systemInfo.gitBackup.enabled) {
+                    gitBackupStatus.innerHTML = `
+                        <span style="color: #27ae60;">✅ Aktiviert</span><br>
+                        <small>Repository: ${systemInfo.gitBackup.repository || 'Nicht konfiguriert'}</small><br>
+                        <small>Anmeldedaten: ${systemInfo.gitBackup.hasCredentials ? '✅ Vorhanden' : '❌ Fehlen'}</small>
+                    `;
+                } else {
+                    gitBackupStatus.innerHTML = '<span style="color: #e74c3c;">❌ Deaktiviert</span>';
+                }
+            }
         } else {
             showError('systemInfo', systemInfo.error);
         }
@@ -375,6 +543,11 @@ function createSystemInfoHTML(systemInfo) {
         <p><strong>Auto-Update:</strong> ${systemInfo.autoUpdate ? '✅ Aktiviert' : '❌ Deaktiviert'}</p>
         <p><strong>Repository:</strong> ${systemInfo.repository}</p>
         <p><strong>Branch:</strong> ${systemInfo.branch}</p>
+        <p><strong>Git Backup:</strong> ${systemInfo.gitBackup.enabled ? '✅ Aktiviert' : '❌ Deaktiviert'}</p>
+        ${systemInfo.gitBackup.enabled ? `
+            <p><strong>Git Repository:</strong> ${systemInfo.gitBackup.repository || 'Nicht konfiguriert'}</p>
+            <p><strong>Git Anmeldedaten:</strong> ${systemInfo.gitBackup.hasCredentials ? '✅ Vorhanden' : '❌ Fehlen'}</p>
+        ` : ''}
     `;
 }
 
@@ -490,6 +663,9 @@ function showTab(tabName) {
         case 'schedule':
             loadSchedules();
             break;
+        case 'git-backup':
+            loadGitBackupConfig();
+            break;
         case 'system':
             loadSystemInfo();
             break;
@@ -511,6 +687,7 @@ async function logout() {
     
     // Clear local state
     authToken = null;
+    gitBackupConfig = null;
     
     // Show login section
     document.getElementById('login-section').style.display = 'block';
@@ -548,6 +725,28 @@ function showSuccess(elementId, message) {
 }
 
 /**
+ * Show warning message
+ */
+function showWarning(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        const existing = element.innerHTML;
+        element.innerHTML = existing + `<div class="warning">${message}</div>`;
+    }
+}
+
+/**
+ * Show info message
+ */
+function showInfo(elementId, message) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        const existing = element.innerHTML;
+        element.innerHTML = existing + `<div class="info">${message}</div>`;
+    }
+}
+
+/**
  * Show loading message
  */
 function showLoading(elementId, message = 'Lädt...') {
@@ -573,10 +772,8 @@ function hideLoading(elementId) {
 function clearMessages(elementId) {
     const element = document.getElementById(elementId);
     if (element) {
-        const errorDiv = element.querySelector('.error');
-        const successDiv = element.querySelector('.success');
-        if (errorDiv) errorDiv.remove();
-        if (successDiv) successDiv.remove();
+        const messages = element.querySelectorAll('.error, .success, .warning, .info');
+        messages.forEach(msg => msg.remove());
     }
 }
 
@@ -622,4 +819,4 @@ window.addEventListener('unhandledrejection', function(e) {
     console.error('Unhandled promise rejection:', e.reason);
 });
 
-console.log('Database Backup Tool - Frontend JavaScript vollständig geladen');
+console.log('Database Backup Tool - Enhanced Frontend JavaScript vollständig geladen');
