@@ -176,6 +176,23 @@ class DatabaseBackupTool {
     console.log(`   GIT_BACKUP_TOKEN: ${process.env.GIT_BACKUP_TOKEN ? '[SET_' + process.env.GIT_BACKUP_TOKEN.length + '_CHARS]' : 'NOT SET'}`);
     console.log(`   GIT_BACKUP_BRANCH: ${process.env.GIT_BACKUP_BRANCH || 'NOT SET'}`);
     console.log("================================");
+    
+    // Token-spezifisches Debugging
+    this.debugTokenStatus();
+    console.log("================================");
+  }
+
+  // NEU: Debug Token-Status - HIER EINFÜGEN!
+  debugTokenStatus() {
+    console.log("🔍 [TOKEN DEBUG] Token Status:");
+    console.log(`   config.gitBackup exists: ${!!this.config.gitBackup}`);
+    console.log(`   config.gitBackup.token exists: ${!!this.config.gitBackup?.token}`);
+    console.log(`   config.gitBackup.token length: ${this.config.gitBackup?.token?.length || 0}`);
+    console.log(`   config.gitBackup.token type: ${typeof this.config.gitBackup?.token}`);
+    
+    // Umgebungsvariable auch prüfen
+    console.log(`   process.env.GIT_BACKUP_TOKEN exists: ${!!process.env.GIT_BACKUP_TOKEN}`);
+    console.log(`   process.env.GIT_BACKUP_TOKEN length: ${process.env.GIT_BACKUP_TOKEN?.length || 0}`);
   }
 
   // Verbesserte buildGitRemoteUrl mit Debug
@@ -786,7 +803,7 @@ class DatabaseBackupTool {
       console.log(`   Enabled: ${enabled}`);
       console.log(`   Repository: '${repository || 'NOT SET'}'`);
       console.log(`   Username: '${username || 'NOT SET'}'`);
-      console.log(`   Token: ${token ? '[SET_' + token.length + '_CHARS]' : 'NOT SET OR UNCHANGED'}`);
+      console.log(`   Token: ${token ? '[NEW_TOKEN_' + token.length + '_CHARS]' : 'NOT_PROVIDED'}`);
       console.log(`   Branch: '${branch || 'main'}'`);
       
       // Validierung der Eingaben
@@ -803,7 +820,9 @@ class DatabaseBackupTool {
           });
         }
         
-        if (!token && !this.config.gitBackup?.token) {
+        // Token-Validierung: Entweder neues Token oder bestehendes Token muss vorhanden sein
+        const finalToken = token || this.config.gitBackup?.token || "";
+        if (!finalToken) {
           return res.status(400).json({ 
             error: "Personal Access Token ist erforderlich wenn Git Backup aktiviert ist" 
           });
@@ -817,18 +836,27 @@ class DatabaseBackupTool {
             error: "Repository URL hat ungültiges Format. Verwende HTTPS URLs wie: https://github.com/username/repo.git" 
           });
         }
+        
+        console.log(`✅ [CONFIG API] Validierung erfolgreich, Final Token: ${finalToken ? '[SET_' + finalToken.length + '_CHARS]' : 'EMPTY'}`);
       }
       
-      // Konfiguration aktualisieren
+      // Konfiguration aktualisieren - WICHTIG: Token korrekt übernehmen
+      const previousConfig = this.config.gitBackup || {};
+      
       this.config.gitBackup = {
         enabled: enabled === true,
         repository: repository || "",
         username: username || "",
-        token: token || this.config.gitBackup?.token || "",
+        token: token || previousConfig.token || "", // HIER IST DER FIX!
         branch: branch || "main"
       };
       
-      console.log("💾 [CONFIG API] Speichere Konfiguration in config.json...");
+      console.log("💾 [CONFIG API] Neue Konfiguration erstellt:");
+      console.log(`   Enabled: ${this.config.gitBackup.enabled}`);
+      console.log(`   Repository: ${this.config.gitBackup.repository}`);
+      console.log(`   Username: ${this.config.gitBackup.username}`);
+      console.log(`   Token: ${this.config.gitBackup.token ? '[FINAL_TOKEN_' + this.config.gitBackup.token.length + '_CHARS]' : 'EMPTY'}`);
+      console.log(`   Branch: ${this.config.gitBackup.branch}`);
       
       // config.json aktualisieren (ohne Token für Sicherheit)
       const configToSave = { ...this.config };
@@ -837,18 +865,29 @@ class DatabaseBackupTool {
       }
       
       fs.writeFileSync("config.json", JSON.stringify(configToSave, null, 2));
-      console.log("✅ [CONFIG API] Konfiguration in config.json gespeichert");
+      console.log("✅ [CONFIG API] Konfiguration in config.json gespeichert (ohne Token)");
       
       // Git Backup neu initialisieren falls aktiviert
       if (enabled) {
         console.log("🔄 [CONFIG API] Initialisiere Git Backup mit neuer Konfiguration...");
+        
+        // Debug: Zeige finale Konfiguration vor Initialisierung
+        console.log("🔍 [CONFIG API] Konfiguration vor Git Initialisierung:");
+        console.log(`   this.config.gitBackup.token: ${this.config.gitBackup.token ? '[AVAILABLE_' + this.config.gitBackup.token.length + '_CHARS]' : 'MISSING'}`);
+        
         await this.initializeGitBackup();
       }
       
       res.json({ 
         message: "Git Backup Konfiguration erfolgreich gespeichert und angewendet",
         applied: true,
-        gitBackupStatus: enabled ? "aktiviert" : "deaktiviert"
+        gitBackupStatus: enabled ? "aktiviert" : "deaktiviert",
+        debug: {
+          tokenReceived: !!token,
+          tokenLength: token ? token.length : 0,
+          finalTokenSet: !!this.config.gitBackup.token,
+          finalTokenLength: this.config.gitBackup.token ? this.config.gitBackup.token.length : 0
+        }
       });
       
     } catch (error) {
