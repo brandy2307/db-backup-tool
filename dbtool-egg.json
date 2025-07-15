@@ -2,7 +2,7 @@
   "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL",
   "meta": {
     "version": "PTDL_v2",
-    "update_url": "https://github.com/brandy23/db-backup-tool/blob/main/dbtool-egg.json"
+    "update_url": "https://github.com/brandy2307/db-backup-tool/blob/main/dbtool-egg.json"
   },
   "exported_at": "2024-12-15T14:40:56+00:00",
   "name": "DB Backup Tool (Enhanced mit Git Backup)",
