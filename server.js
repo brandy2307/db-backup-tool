@@ -829,6 +829,7 @@ class DatabaseBackupTool {
       console.log("   Dies ist der kritische Schritt - detailliertes Logging aktiv...");
       console.log("   Timeout: 60 Sekunden");
       
+      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git pull --rebase origin ${branch}`, "Git Pull (Rebase)", true);
       await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git push origin ${branch}`, "Git Push", true, 60000);
       
       const duration = Date.now() - startTime;
