@@ -180,7 +180,7 @@ class DatabaseBackupTool {
 
   // Verbesserte buildGitRemoteUrl mit Debug
   buildGitRemoteUrl() {
-    console.log("🔍 [GIT URL] Starte Git Remote URL Erstellung...");
+    console.log("🔍 [GIT URL] Starte Git Remote URL Erstellung (GitHub Fix)...");
     
     // Debug: Komplette Konfiguration ausgeben
     this.debugGitConfiguration();
@@ -199,11 +199,6 @@ class DatabaseBackupTool {
       return null;
     }
     
-    if (!username) {
-      console.error("❌ [GIT URL] Username ist leer oder undefined!");
-      return null;
-    }
-    
     if (!token) {
       console.error("❌ [GIT URL] Token ist leer oder undefined!");
       return null;
@@ -217,20 +212,60 @@ class DatabaseBackupTool {
       console.log(`   Host: ${url.host}`);
       console.log(`   Pathname: ${url.pathname}`);
       
-      // Stelle sicher, dass Username und Token korrekt encoded werden
-      const encodedUsername = encodeURIComponent(username);
-      const encodedToken = encodeURIComponent(token);
+      // GitHub-spezifische Authentifizierung
+      let authenticatedUrl;
       
-      console.log(`🔍 [GIT URL] Encoded Werte:`);
-      console.log(`   Encoded Username: '${encodedUsername}'`);
-      console.log(`   Encoded Token: '[HIDDEN_${encodedToken.length}_CHARS]'`);
+      if (url.host.includes('github.com')) {
+        console.log("🔍 [GIT URL] GitHub erkannt - verwende Token-basierte Authentifizierung");
+        
+        // Für GitHub: Token als Username, kein Passwort
+        // Format: https://TOKEN@github.com/user/repo.git
+        const encodedToken = encodeURIComponent(token);
+        authenticatedUrl = `${url.protocol}//${encodedToken}@${url.host}${url.pathname}`;
+        
+        console.log(`✅ [GIT URL] GitHub-Token Authentifizierung konfiguriert`);
+        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[TOKEN]@${url.host}${url.pathname}`);
+        
+      } else if (url.host.includes('gitlab.com')) {
+        console.log("🔍 [GIT URL] GitLab erkannt - verwende Username:Token Authentifizierung");
+        
+        // Für GitLab: Username:Token Format
+        const encodedUsername = encodeURIComponent(username || 'oauth2');
+        const encodedToken = encodeURIComponent(token);
+        authenticatedUrl = `${url.protocol}//${encodedUsername}:${encodedToken}@${url.host}${url.pathname}`;
+        
+        console.log(`✅ [GIT URL] GitLab Username:Token Authentifizierung konfiguriert`);
+        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[TOKEN]@${url.host}${url.pathname}`);
+        
+      } else if (url.host.includes('bitbucket.org')) {
+        console.log("🔍 [GIT URL] Bitbucket erkannt - verwende Username:AppPassword Authentifizierung");
+        
+        // Für Bitbucket: Username:AppPassword Format
+        if (!username) {
+          console.error("❌ [GIT URL] Username ist für Bitbucket erforderlich!");
+          return null;
+        }
+        
+        const encodedUsername = encodeURIComponent(username);
+        const encodedToken = encodeURIComponent(token);
+        authenticatedUrl = `${url.protocol}//${encodedUsername}:${encodedToken}@${url.host}${url.pathname}`;
+        
+        console.log(`✅ [GIT URL] Bitbucket Username:AppPassword Authentifizierung konfiguriert`);
+        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[APPPASSWORD]@${url.host}${url.pathname}`);
+        
+      } else {
+        console.log("🔍 [GIT URL] Unbekannter Git-Provider - verwende Standard Username:Token Format");
+        
+        // Für andere Provider: Standard Username:Token
+        const encodedUsername = encodeURIComponent(username || 'git');
+        const encodedToken = encodeURIComponent(token);
+        authenticatedUrl = `${url.protocol}//${encodedUsername}:${encodedToken}@${url.host}${url.pathname}`;
+        
+        console.log(`✅ [GIT URL] Standard Username:Token Authentifizierung konfiguriert`);
+        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[TOKEN]@${url.host}${url.pathname}`);
+      }
       
-      // Authentifizierte URL erstellen
-      const authenticatedUrl = `${url.protocol}//${encodedUsername}:${encodedToken}@${url.host}${url.pathname}`;
-      
-      console.log(`✅ [GIT URL] Authentifizierte URL erstellt für ${url.host}`);
-      console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[TOKEN]@${url.host}${url.pathname}`);
-      
+      console.log(`✅ [GIT URL] Authentifizierte URL für ${url.host} erstellt`);
       return authenticatedUrl;
       
     } catch (error) {
@@ -238,6 +273,54 @@ class DatabaseBackupTool {
       console.error(`   Repository Wert: '${repository}'`);
       return null;
     }
+  }
+
+// ZUSÄTZLICH: Erweiterte Validierung für Git-Provider
+// Füge diese Methode auch hinzu:
+
+  // Validiere Git-Provider spezifische Konfiguration
+  validateGitProviderConfig(repository, username, token) {
+    const issues = [];
+    
+    try {
+      const url = new URL(repository);
+      
+      if (url.host.includes('github.com')) {
+        // GitHub braucht nur Token
+        if (!token) {
+          issues.push("GitHub Personal Access Token ist erforderlich");
+        }
+        if (token && !token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+          issues.push("GitHub Token sollte mit 'ghp_' oder 'github_pat_' beginnen");
+        }
+        
+      } else if (url.host.includes('gitlab.com')) {
+        // GitLab braucht Token, Username ist optional
+        if (!token) {
+          issues.push("GitLab Personal Access Token ist erforderlich");
+        }
+        
+      } else if (url.host.includes('bitbucket.org')) {
+        // Bitbucket braucht Username und App Password
+        if (!username) {
+          issues.push("Bitbucket Username ist erforderlich");
+        }
+        if (!token) {
+          issues.push("Bitbucket App Password ist erforderlich");
+        }
+        
+      } else {
+        // Andere Provider
+        if (!token) {
+          issues.push("Personal Access Token ist erforderlich");
+        }
+      }
+      
+    } catch (error) {
+      issues.push("Repository URL ist ungültig");
+    }
+    
+    return issues;
   }
 
   // Hilfsmethode: Generate Git Debug Info
