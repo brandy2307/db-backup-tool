@@ -281,20 +281,30 @@ class DatabaseBackupTool {
 
 
   async init() {
-    // Auto-Update beim Start ausführen
-    if (this.config.updates && this.config.updates.autoUpdate) {
-      console.log("🔄 Auto-Update ist aktiviert, prüfe auf Updates...");
-      await this.checkForUpdates();
-    }
-
-    this.setupMiddleware();
-    this.setupRoutes();
-    this.setupDefaultUser();
-    this.ensureDirectories();
-    await this.initializeGitBackup();
-    this.loadSchedulesFromFile();
-    this.startServer();
+  // Auto-Update beim Start ausführen
+  if (this.config.updates && this.config.updates.autoUpdate) {
+    console.log("🔄 Auto-Update ist aktiviert, prüfe auf Updates...");
+    await this.checkForUpdates();
   }
+
+  this.setupMiddleware();
+  this.setupRoutes();
+  this.setupDefaultUser();
+  this.ensureDirectories();
+
+  // NEU: Token aus .git-secrets.enc laden
+  const savedToken = this.loadGitToken();
+  if (savedToken && this.config.gitBackup) {
+    this.config.gitBackup.token = savedToken;
+    console.log(`✅ [INIT] Git Token aus .git-secrets.enc geladen (${savedToken.length} Zeichen)`);
+  } else {
+    console.warn("⚠️ [INIT] Kein gültiger Git Token beim Start geladen");
+  }
+
+  await this.initializeGitBackup();
+  this.loadSchedulesFromFile();
+  this.startServer();
+}
 
   // Enhanced execPromise mit detailliertem Debugging
   execPromiseWithDebug(command, operation, hideOutput = false, timeout = 10000) {
