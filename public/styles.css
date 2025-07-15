@@ -1,4 +1,4 @@
-/* Database Backup Tool - Enhanced Styles mit Git Backup */
+/* Database Backup Tool - Enhanced Styles mit Git Backup - Dark Theme */
 
 /* Reset & Base Styles */
 * {
@@ -9,20 +9,19 @@
 
 body {
     font-family: Arial, sans-serif;
-    background: #f5f5f5;
+    background: #121212;
+    color: #e0e0e0;
     line-height: 1.6;
 }
 
-/* Container & Layout */
 .container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
 }
 
-/* Header */
 .header {
-    background: #2c3e50;
+    background: #1f1f1f;
     color: white;
     padding: 20px;
     text-align: center;
@@ -41,10 +40,10 @@ body {
 
 /* Login Form */
 .login-form {
-    background: white;
+    background: #1e1e1e;
     padding: 30px;
     border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     max-width: 400px;
     margin: 50px auto;
 }
@@ -52,10 +51,9 @@ body {
 .login-form h2 {
     text-align: center;
     margin-bottom: 25px;
-    color: #2c3e50;
+    color: #ffffff;
 }
 
-/* Form Styles */
 .form-group {
     margin-bottom: 15px;
 }
@@ -70,10 +68,9 @@ label {
     display: block;
     margin-bottom: 5px;
     font-weight: bold;
-    color: #34495e;
+    color: #cccccc;
 }
 
-/* Checkbox Labels */
 label input[type="checkbox"] {
     width: auto;
     margin-right: 8px;
@@ -83,29 +80,30 @@ label input[type="checkbox"] {
 input, select {
     width: 100%;
     padding: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid #444;
     border-radius: 4px;
     font-size: 14px;
+    background: #2c2c2c;
+    color: #e0e0e0;
     transition: border-color 0.3s ease;
 }
 
 input:focus, select:focus {
     outline: none;
-    border-color: #3498db;
-    box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+    border-color: #4a90e2;
+    box-shadow: 0 0 5px rgba(74, 144, 226, 0.5);
 }
 
 small {
     display: block;
     margin-top: 5px;
-    color: #7f8c8d;
+    color: #a0a0a0;
     font-size: 12px;
     line-height: 1.4;
 }
 
-/* Buttons */
 button {
-    background: #3498db;
+    background: #4a90e2;
     color: white;
     padding: 12px 24px;
     border: none;
@@ -116,7 +114,7 @@ button {
 }
 
 button:hover {
-    background: #2980b9;
+    background: #357ab8;
 }
 
 button:active {
@@ -124,56 +122,54 @@ button:active {
 }
 
 .update-button {
-    background: #27ae60;
+    background: #28a745;
     margin-left: 10px;
 }
 
 .update-button:hover {
-    background: #219a52;
+    background: #218838;
 }
 
-/* Main Content */
 .main-content {
     display: none;
 }
 
-/* Tabs */
 .tabs {
     display: flex;
-    background: white;
+    background: #1e1e1e;
     border-radius: 8px;
     overflow: hidden;
     margin-bottom: 20px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
 }
 
 .tab {
     flex: 1;
     padding: 15px;
-    background: #ecf0f1;
+    background: #2a2a2a;
     border: none;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
+    color: #cccccc;
     transition: all 0.3s ease;
 }
 
 .tab:hover {
-    background: #d5dbdb;
+    background: #3a3a3a;
 }
 
 .tab.active {
-    background: #3498db;
+    background: #4a90e2;
     color: white;
 }
 
-/* Tab Content */
 .tab-content {
     display: none;
-    background: white;
+    background: #1e1e1e;
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
 }
 
 .tab-content.active {
@@ -182,12 +178,11 @@ button:active {
 
 .tab-content h2 {
     margin-bottom: 20px;
-    color: #2c3e50;
-    border-bottom: 2px solid #3498db;
+    color: #ffffff;
+    border-bottom: 2px solid #4a90e2;
     padding-bottom: 10px;
 }
 
-/* Forms */
 .backup-form {
     display: grid;
     gap: 15px;
@@ -200,7 +195,6 @@ button:active {
     font-weight: bold;
 }
 
-/* Lists */
 .backup-list {
     margin-top: 20px;
 }
@@ -210,23 +204,23 @@ button:active {
     justify-content: space-between;
     align-items: center;
     padding: 15px;
-    border: 1px solid #ddd;
+    border: 1px solid #3c3c3c;
     border-radius: 4px;
     margin-bottom: 10px;
-    background: #fafafa;
+    background: #2a2a2a;
     transition: background-color 0.3s ease;
 }
 
 .backup-item:hover {
-    background: #f0f0f0;
+    background: #3a3a3a;
 }
 
 .backup-item strong {
-    color: #2c3e50;
+    color: #ffffff;
 }
 
 .backup-item small {
-    color: #7f8c8d;
+    color: #aaaaaa;
     margin: 2px 0;
 }
 
@@ -244,7 +238,6 @@ button:active {
     background: #c0392b !important;
 }
 
-/* Status Indicators */
 .status-indicator {
     display: inline-block;
     width: 10px;
@@ -254,90 +247,86 @@ button:active {
 }
 
 .status-active {
-    background: #27ae60;
+    background: #28a745;
     box-shadow: 0 0 5px rgba(39, 174, 96, 0.5);
 }
 
 .status-inactive {
-    background: #e74c3c;
+    background: #dc3545;
     box-shadow: 0 0 5px rgba(231, 76, 60, 0.5);
 }
 
-/* Schedule Info */
 .schedule-info {
     font-size: 0.9em;
-    color: #666;
+    color: #999;
     font-style: italic;
 }
 
-/* System Information */
 .system-info {
-    background: #f8f9fa;
+    background: #1f1f1f;
     padding: 15px;
     border-radius: 8px;
     margin-bottom: 20px;
-    border-left: 4px solid #3498db;
+    border-left: 4px solid #4a90e2;
 }
 
 .system-info h3 {
     margin-bottom: 10px;
-    color: #2c3e50;
+    color: #ffffff;
 }
 
 .system-info p {
     margin: 5px 0;
     font-size: 0.9em;
-    color: #555;
+    color: #bbbbbb;
 }
 
 .system-info strong {
-    color: #2c3e50;
+    color: #ffffff;
 }
 
-/* Repository Info */
 .repo-info {
-    background: #e8f5e8;
+    background: #223322;
     padding: 15px;
     border-radius: 8px;
-    border-left: 4px solid #27ae60;
+    border-left: 4px solid #28a745;
     margin-bottom: 20px;
 }
 
 .repo-info h4 {
-    color: #27ae60;
+    color: #28a745;
     margin-bottom: 10px;
     font-size: 1.1em;
 }
 
 .repo-info p {
     font-size: 0.9em;
-    color: #555;
+    color: #cccccc;
     margin: 5px 0;
 }
 
 .repo-info strong {
-    color: #27ae60;
+    color: #28a745;
 }
 
-/* Git Backup Specific Styles */
 .git-backup-info {
-    background: #e8f4fd;
+    background: #1e2c3a;
     padding: 15px;
     border-radius: 8px;
-    border-left: 4px solid #3498db;
+    border-left: 4px solid #4a90e2;
     margin-bottom: 20px;
 }
 
 .git-backup-info h4 {
-    color: #3498db;
+    color: #4a90e2;
     margin-bottom: 10px;
     font-size: 1.1em;
 }
 
-.git-backup-info p {
+.git-backup-info p,
+.git-backup-info li {
     font-size: 0.9em;
-    color: #555;
-    margin: 5px 0;
+    color: #cccccc;
 }
 
 .git-backup-info ul {
@@ -347,32 +336,28 @@ button:active {
 
 .git-backup-info li {
     margin: 5px 0;
-    font-size: 0.9em;
-    color: #555;
 }
 
-/* Git Config Fields */
 .git-config-field {
     transition: all 0.3s ease;
 }
 
-/* Help Sections */
 .git-backup-help {
-    border-top: 2px solid #ecf0f1;
+    border-top: 2px solid #444;
     padding-top: 20px;
 }
 
 .help-section {
-    background: #f8f9fa;
+    background: #1f1f1f;
     padding: 15px;
     border-radius: 8px;
     margin-bottom: 15px;
-    border-left: 4px solid #95a5a6;
+    border-left: 4px solid #666;
 }
 
 .help-section h5 {
     margin-bottom: 10px;
-    color: #2c3e50;
+    color: #ffffff;
     font-size: 1em;
 }
 
@@ -383,36 +368,35 @@ button:active {
 .help-section li {
     margin: 5px 0;
     font-size: 0.9em;
-    color: #555;
+    color: #bbbbbb;
     line-height: 1.4;
 }
 
 .help-section code {
-    background: #ecf0f1;
+    background: #333;
     padding: 2px 6px;
     border-radius: 3px;
     font-family: 'Courier New', monospace;
     font-size: 0.85em;
-    color: #e74c3c;
+    color: #ff6b6b;
 }
 
-/* Messages */
 .error {
-    color: #e74c3c;
+    color: #ff6b6b;
     margin-top: 10px;
     padding: 10px;
-    background: #fdf2f2;
-    border: 1px solid #f5c6cb;
+    background: #3b1f1f;
+    border: 1px solid #883333;
     border-radius: 4px;
     font-size: 14px;
 }
 
 .success {
-    color: #27ae60;
+    color: #28a745;
     margin-top: 10px;
     padding: 10px;
-    background: #f0f9f0;
-    border: 1px solid #c3e6cb;
+    background: #1f3b1f;
+    border: 1px solid #2e7d32;
     border-radius: 4px;
     font-size: 14px;
 }
@@ -421,18 +405,18 @@ button:active {
     color: #f39c12;
     margin-top: 10px;
     padding: 10px;
-    background: #fef9e7;
-    border: 1px solid #faebcc;
+    background: #3b331f;
+    border: 1px solid #a47c1c;
     border-radius: 4px;
     font-size: 14px;
 }
 
 .info {
-    color: #3498db;
+    color: #4a90e2;
     margin-top: 10px;
     padding: 10px;
-    background: #e8f4fd;
-    border: 1px solid #bee5eb;
+    background: #1f2a3b;
+    border: 1px solid #3b75b2;
     border-radius: 4px;
     font-size: 14px;
 }
@@ -442,47 +426,37 @@ button:active {
     .container {
         padding: 10px;
     }
-    
     .form-row {
         grid-template-columns: 1fr;
         gap: 10px;
     }
-    
     .tabs {
         flex-direction: column;
     }
-    
     .tab {
-        border-bottom: 1px solid #ddd;
+        border-bottom: 1px solid #444;
     }
-    
     .tab:last-child {
         border-bottom: none;
     }
-    
     .backup-item {
         flex-direction: column;
         align-items: flex-start;
         gap: 10px;
     }
-    
     .backup-item > div:last-child {
         align-self: flex-end;
     }
-    
     .header h1 {
         font-size: 2em;
     }
-    
     .login-form {
         margin: 20px auto;
         padding: 20px;
     }
-    
     .help-section ol, .help-section ul {
         margin-left: 15px;
     }
-    
     .git-backup-info ul {
         margin-left: 15px;
     }
@@ -492,42 +466,27 @@ button:active {
     .header {
         padding: 15px;
     }
-    
     .header h1 {
         font-size: 1.8em;
     }
-    
     .header p {
         font-size: 1em;
     }
-    
     .tab-content {
         padding: 15px;
     }
-    
     .backup-item button {
         width: 100%;
         margin: 2px 0;
     }
-    
-    .help-section {
-        padding: 10px;
-    }
-    
-    .git-backup-info {
-        padding: 10px;
-    }
-    
-    .repo-info {
-        padding: 10px;
-    }
-    
+    .help-section,
+    .git-backup-info,
+    .repo-info,
     .system-info {
         padding: 10px;
     }
 }
 
-/* Loading States */
 .loading {
     opacity: 0.6;
     pointer-events: none;
@@ -541,7 +500,7 @@ button:active {
     width: 20px;
     height: 20px;
     margin: -10px 0 0 -10px;
-    border: 2px solid #3498db;
+    border: 2px solid #4a90e2;
     border-radius: 50%;
     border-top-color: transparent;
     animation: spin 1s linear infinite;
@@ -551,7 +510,6 @@ button:active {
     to { transform: rotate(360deg); }
 }
 
-/* Animation für Git Config Fields */
 .git-config-field {
     opacity: 0;
     max-height: 0;
@@ -565,7 +523,6 @@ button:active {
     margin-bottom: 15px;
 }
 
-/* Utility Classes */
 .text-center {
     text-align: center;
 }
@@ -586,7 +543,6 @@ button:active {
     display: none !important;
 }
 
-/* Special button styles for Git functions */
 button[onclick*="testGitBackup"] {
     background: #f39c12;
 }
@@ -595,7 +551,6 @@ button[onclick*="testGitBackup"]:hover {
     background: #e67e22;
 }
 
-/* Enhanced status displays */
 #git-backup-status {
     font-size: 0.9em;
 }
@@ -605,6 +560,6 @@ button[onclick*="testGitBackup"]:hover {
 }
 
 #git-backup-status small {
-    color: #666;
+    color: #999;
     font-style: italic;
 }
