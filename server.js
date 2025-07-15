@@ -28,6 +28,9 @@ class DatabaseBackupTool {
     
     // Git Backup Repository Pfad
     this.gitBackupPath = path.join(this.config.backup.defaultPath, "git-backup");
+
+    this.secretsFile = path.join(this.config.backup.defaultPath, '.git-secrets.enc');
+    this.encryptionKey = this.config.security.jwtSecret; // JWT Secret als Verschlüsselungsschlüssel
     
     this.init();
   }
@@ -73,13 +76,24 @@ class DatabaseBackupTool {
         config.gitBackup = config.gitBackup || {};
         config.gitBackup.username = process.env.GIT_BACKUP_USERNAME;
       }
-      if (process.env.GIT_BACKUP_TOKEN) {
-        config.gitBackup = config.gitBackup || {};
-        config.gitBackup.token = process.env.GIT_BACKUP_TOKEN;
-      }
       if (process.env.GIT_BACKUP_BRANCH) {
         config.gitBackup = config.gitBackup || {};
         config.gitBackup.branch = process.env.GIT_BACKUP_BRANCH;
+      }
+      if (process.env.GIT_BACKUP_TOKEN) {
+        // Umgebungsvariable hat Priorität
+        config.gitBackup = config.gitBackup || {};
+        config.gitBackup.token = process.env.GIT_BACKUP_TOKEN;
+        console.log('🔑 [CONFIG] Git Token aus Umgebungsvariable geladen');
+      } else if (config.gitBackup && config.gitBackup.enabled) {
+        // Versuche Token aus verschlüsselter Datei zu laden
+        const savedToken = this.loadGitToken();
+        if (savedToken) {
+          config.gitBackup.token = savedToken;
+          console.log('🔑 [CONFIG] Git Token aus verschlüsselter Datei geladen');
+        } else {
+          console.log('⚠️ [CONFIG] Kein gespeicherter Git Token gefunden');
+        }
       }
 
       // Repository-Informationen fest setzen (nicht überschreibbar)
@@ -93,6 +107,178 @@ class DatabaseBackupTool {
       process.exit(1);
     }
   }
+
+  encryptToken(token) {
+    try {
+      const algorithm = 'aes-256-cbc';
+      const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
+      const iv = crypto.randomBytes(16);
+      
+      const cipher = crypto.createCipher(algorithm, key);
+      let encrypted = cipher.update(token, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      
+      // IV + verschlüsselte Daten kombinieren
+      return iv.toString('hex') + ':' + encrypted;
+    } catch (error) {
+      console.error('❌ [TOKEN CRYPTO] Verschlüsselung fehlgeschlagen:', error);
+      throw new Error('Token-Verschlüsselung fehlgeschlagen');
+    }
+  }
+
+  decryptToken(encryptedData) {
+    try {
+      const algorithm = 'aes-256-cbc';
+      const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
+      
+      // IV und verschlüsselte Daten trennen
+      const parts = encryptedData.split(':');
+      if (parts.length !== 2) {
+        throw new Error('Ungültiges verschlüsseltes Token-Format');
+      }
+      
+      const iv = Buffer.from(parts[0], 'hex');
+      const encrypted = parts[1];
+      
+      const decipher = crypto.createDecipher(algorithm, key);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      
+      return decrypted;
+    } catch (error) {
+      console.error('❌ [TOKEN CRYPTO] Entschlüsselung fehlgeschlagen:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Git Token verschlüsselt speichern
+   */
+  saveGitToken(token) {
+    try {
+      console.log('🔐 [TOKEN SAVE] Speichere Git Token verschlüsselt...');
+      
+      if (!token || token.trim() === '') {
+        console.log('⚠️ [TOKEN SAVE] Leerer Token - lösche gespeicherten Token');
+        if (fs.existsSync(this.secretsFile)) {
+          fs.unlinkSync(this.secretsFile);
+        }
+        return;
+      }
+      
+      const encryptedToken = this.encryptToken(token.trim());
+      
+      const secrets = {
+        version: '1.0',
+        gitBackupToken: encryptedToken,
+        savedAt: new Date().toISOString(),
+        tokenLength: token.length,
+        checksum: crypto.createHash('sha256').update(token).digest('hex').substring(0, 8)
+      };
+      
+      // Datei mit restriktiven Berechtigungen erstellen
+      fs.writeFileSync(this.secretsFile, JSON.stringify(secrets, null, 2), { mode: 0o600 });
+      
+      console.log(`✅ [TOKEN SAVE] Git Token verschlüsselt gespeichert (${token.length} Zeichen)`);
+      console.log(`📁 [TOKEN SAVE] Datei: ${this.secretsFile}`);
+      console.log(`🔒 [TOKEN SAVE] Berechtigung: 600 (nur Besitzer lesbar)`);
+      
+    } catch (error) {
+      console.error('❌ [TOKEN SAVE] Fehler beim Speichern des Git Tokens:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Git Token aus verschlüsselter Datei laden
+   */
+  loadGitToken() {
+    try {
+      if (!fs.existsSync(this.secretsFile)) {
+        console.log('📝 [TOKEN LOAD] Keine verschlüsselte Token-Datei gefunden');
+        return null;
+      }
+      
+      console.log('🔓 [TOKEN LOAD] Lade verschlüsselten Git Token...');
+      
+      const secretsData = fs.readFileSync(this.secretsFile, 'utf8');
+      const secrets = JSON.parse(secretsData);
+      
+      if (!secrets.gitBackupToken) {
+        console.log('⚠️ [TOKEN LOAD] Keine Token-Daten in verschlüsselter Datei');
+        return null;
+      }
+      
+      const decryptedToken = this.decryptToken(secrets.gitBackupToken);
+      
+      if (decryptedToken) {
+        console.log(`✅ [TOKEN LOAD] Git Token erfolgreich entschlüsselt (${decryptedToken.length} Zeichen)`);
+        console.log(`📅 [TOKEN LOAD] Gespeichert am: ${secrets.savedAt}`);
+        
+        // Validiere Token-Integrität
+        const currentChecksum = crypto.createHash('sha256').update(decryptedToken).digest('hex').substring(0, 8);
+        if (secrets.checksum && secrets.checksum !== currentChecksum) {
+          console.error('❌ [TOKEN LOAD] Token-Checksum stimmt nicht überein - möglicherweise korrupt');
+          return null;
+        }
+        
+        return decryptedToken;
+      } else {
+        console.error('❌ [TOKEN LOAD] Token-Entschlüsselung fehlgeschlagen');
+        return null;
+      }
+      
+    } catch (error) {
+      console.error('❌ [TOKEN LOAD] Fehler beim Laden des Git Tokens:', error);
+      
+      // Bei Fehler: Backup der korrupten Datei erstellen
+      if (fs.existsSync(this.secretsFile)) {
+        const backupFile = `${this.secretsFile}.corrupt.${Date.now()}`;
+        try {
+          fs.copyFileSync(this.secretsFile, backupFile);
+          console.log(`📋 [TOKEN LOAD] Korrupte Token-Datei gesichert: ${backupFile}`);
+        } catch (backupError) {
+          console.error('❌ [TOKEN LOAD] Konnte korrupte Datei nicht sichern:', backupError);
+        }
+      }
+      
+      return null;
+    }
+  }
+
+  /**
+   * Token-Status für Debugging
+   */
+  getTokenStatus() {
+    const hasSecretsFile = fs.existsSync(this.secretsFile);
+    let tokenInfo = {
+      hasSecretsFile: hasSecretsFile,
+      secretsFilePath: this.secretsFile,
+      canDecrypt: false,
+      tokenLength: 0,
+      savedAt: null
+    };
+    
+    if (hasSecretsFile) {
+      try {
+        const secretsData = fs.readFileSync(this.secretsFile, 'utf8');
+        const secrets = JSON.parse(secretsData);
+        
+        tokenInfo.savedAt = secrets.savedAt;
+        tokenInfo.tokenLength = secrets.tokenLength || 0;
+        
+        // Teste Entschlüsselung
+        const token = this.decryptToken(secrets.gitBackupToken);
+        tokenInfo.canDecrypt = !!token;
+        
+      } catch (error) {
+        tokenInfo.error = error.message;
+      }
+    }
+    
+    return tokenInfo;
+  }
+
 
   async init() {
     // Auto-Update beim Start ausführen
@@ -803,7 +989,7 @@ class DatabaseBackupTool {
       console.log(`   Enabled: ${enabled}`);
       console.log(`   Repository: '${repository || 'NOT SET'}'`);
       console.log(`   Username: '${username || 'NOT SET'}'`);
-      console.log(`   Token: ${token ? '[NEW_TOKEN_' + token.length + '_CHARS]' : 'NOT_PROVIDED'}`);
+      console.log(`   Neuer Token: ${token ? '[EMPFANGEN_' + token.length + '_CHARS]' : 'NICHT_GESENDET'}`);
       console.log(`   Branch: '${branch || 'main'}'`);
       
       // Validierung der Eingaben
@@ -820,14 +1006,6 @@ class DatabaseBackupTool {
           });
         }
         
-        // Token-Validierung: Entweder neues Token oder bestehendes Token muss vorhanden sein
-        const finalToken = token || this.config.gitBackup?.token || "";
-        if (!finalToken) {
-          return res.status(400).json({ 
-            error: "Personal Access Token ist erforderlich wenn Git Backup aktiviert ist" 
-          });
-        }
-        
         // Repository URL Format validieren
         try {
           new URL(repository);
@@ -836,59 +1014,109 @@ class DatabaseBackupTool {
             error: "Repository URL hat ungültiges Format. Verwende HTTPS URLs wie: https://github.com/username/repo.git" 
           });
         }
-        
-        console.log(`✅ [CONFIG API] Validierung erfolgreich, Final Token: ${finalToken ? '[SET_' + finalToken.length + '_CHARS]' : 'EMPTY'}`);
       }
       
-      // Konfiguration aktualisieren - WICHTIG: Token korrekt übernehmen
-      const previousConfig = this.config.gitBackup || {};
+      // Token-Behandlung: Neuer Token oder bestehender Token
+      let finalToken = "";
       
+      if (token && token.trim() !== "") {
+        // Neuer Token wurde gesendet
+        finalToken = token.trim();
+        console.log(`🔑 [CONFIG API] Neuer Token empfangen (${finalToken.length} Zeichen)`);
+        
+        // Token verschlüsselt speichern
+        try {
+          this.saveGitToken(finalToken);
+          console.log('✅ [CONFIG API] Neuer Token verschlüsselt gespeichert');
+        } catch (tokenError) {
+          console.error('❌ [CONFIG API] Fehler beim Speichern des Tokens:', tokenError);
+          return res.status(500).json({ 
+            error: "Fehler beim Speichern des Tokens: " + tokenError.message 
+          });
+        }
+      } else {
+        // Kein neuer Token - versuche bestehenden Token zu laden
+        const existingToken = this.loadGitToken();
+        if (existingToken) {
+          finalToken = existingToken;
+          console.log(`🔑 [CONFIG API] Bestehender Token geladen (${finalToken.length} Zeichen)`);
+        } else {
+          console.log('⚠️ [CONFIG API] Kein Token verfügbar (weder neu noch gespeichert)');
+        }
+      }
+      
+      // Token-Validierung für aktiviertes Git Backup
+      if (enabled && !finalToken) {
+        return res.status(400).json({ 
+          error: "Personal Access Token ist erforderlich wenn Git Backup aktiviert ist. Bitte gib einen Token ein." 
+        });
+      }
+      
+      console.log(`✅ [CONFIG API] Token-Validierung erfolgreich, Final Token: ${finalToken ? '[SET_' + finalToken.length + '_CHARS]' : 'EMPTY'}`);
+      
+      // Konfiguration im Speicher aktualisieren - MIT Token!
       this.config.gitBackup = {
         enabled: enabled === true,
         repository: repository || "",
         username: username || "",
-        token: token || previousConfig.token || "", // HIER IST DER FIX!
+        token: finalToken,  // WICHTIG: Token im Speicher behalten!
         branch: branch || "main"
       };
       
-      console.log("💾 [CONFIG API] Neue Konfiguration erstellt:");
+      console.log("💾 [CONFIG API] Neue Konfiguration im Speicher:");
       console.log(`   Enabled: ${this.config.gitBackup.enabled}`);
       console.log(`   Repository: ${this.config.gitBackup.repository}`);
       console.log(`   Username: ${this.config.gitBackup.username}`);
-      console.log(`   Token: ${this.config.gitBackup.token ? '[FINAL_TOKEN_' + this.config.gitBackup.token.length + '_CHARS]' : 'EMPTY'}`);
+      console.log(`   Token im Speicher: ${this.config.gitBackup.token ? '[GESETZT_' + this.config.gitBackup.token.length + '_CHARS]' : 'LEER'}`);
       console.log(`   Branch: ${this.config.gitBackup.branch}`);
       
-      // config.json aktualisieren (ohne Token für Sicherheit)
+      // config.json speichern (OHNE Token aus Sicherheitsgründen)
       const configToSave = { ...this.config };
       if (configToSave.gitBackup) {
-        delete configToSave.gitBackup.token; // Token nicht in Datei speichern
+        delete configToSave.gitBackup.token; // Token nicht in config.json
       }
       
       fs.writeFileSync("config.json", JSON.stringify(configToSave, null, 2));
-      console.log("✅ [CONFIG API] Konfiguration in config.json gespeichert (ohne Token)");
+      console.log("✅ [CONFIG API] config.json gespeichert (ohne Token)");
       
-      // Git Backup neu initialisieren falls aktiviert
-      if (enabled) {
+      // Git Backup neu initialisieren falls aktiviert und Token vorhanden
+      if (enabled && finalToken) {
         console.log("🔄 [CONFIG API] Initialisiere Git Backup mit neuer Konfiguration...");
         
-        // Debug: Zeige finale Konfiguration vor Initialisierung
-        console.log("🔍 [CONFIG API] Konfiguration vor Git Initialisierung:");
-        console.log(`   this.config.gitBackup.token: ${this.config.gitBackup.token ? '[AVAILABLE_' + this.config.gitBackup.token.length + '_CHARS]' : 'MISSING'}`);
-        
-        await this.initializeGitBackup();
+        try {
+          await this.initializeGitBackup();
+          console.log("✅ [CONFIG API] Git Backup erfolgreich initialisiert");
+        } catch (initError) {
+          console.error("❌ [CONFIG API] Git Backup Initialisierung fehlgeschlagen:", initError);
+          // Nicht als Fehler zurückgeben, da Konfiguration gespeichert wurde
+        }
       }
       
-      res.json({ 
-        message: "Git Backup Konfiguration erfolgreich gespeichert und angewendet",
+      // Response mit detaillierter Information
+      const response = {
+        message: "Git Backup Konfiguration erfolgreich gespeichert",
         applied: true,
         gitBackupStatus: enabled ? "aktiviert" : "deaktiviert",
+        tokenStatus: {
+          provided: !!token,
+          saved: !!finalToken,
+          encrypted: !!finalToken,
+          length: finalToken ? finalToken.length : 0
+        },
         debug: {
-          tokenReceived: !!token,
-          tokenLength: token ? token.length : 0,
-          finalTokenSet: !!this.config.gitBackup.token,
-          finalTokenLength: this.config.gitBackup.token ? this.config.gitBackup.token.length : 0
+          configUpdated: true,
+          tokenInMemory: !!this.config.gitBackup.token,
+          secretsFileExists: fs.existsSync(this.secretsFile)
         }
-      });
+      };
+      
+      if (enabled && finalToken) {
+        response.message += " und Git Backup initialisiert";
+      } else if (enabled && !finalToken) {
+        response.message += " (Git Backup benötigt noch einen Token)";
+      }
+      
+      res.json(response);
       
     } catch (error) {
       console.error("❌ [CONFIG API] Fehler beim Speichern der Git Backup Konfiguration:", error);
@@ -1850,6 +2078,55 @@ class DatabaseBackupTool {
     // 404 Handler
     this.app.use((req, res) => {
       res.status(404).json({ error: "Endpunkt nicht gefunden" });
+    });
+
+    this.app.get("/api/git-backup/token-status", authMiddleware, (req, res) => {
+      try {
+        const tokenStatus = this.getTokenStatus();
+        
+        const response = {
+          timestamp: new Date().toISOString(),
+          tokenStatus: tokenStatus,
+          memoryToken: {
+            hasToken: !!this.config.gitBackup?.token,
+            tokenLength: this.config.gitBackup?.token ? this.config.gitBackup.token.length : 0
+          },
+          environmentToken: {
+            hasEnvToken: !!process.env.GIT_BACKUP_TOKEN,
+            envTokenLength: process.env.GIT_BACKUP_TOKEN ? process.env.GIT_BACKUP_TOKEN.length : 0
+          }
+        };
+        
+        res.json(response);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // NEU: Token löschen Route
+    this.app.delete("/api/git-backup/token", authMiddleware, (req, res) => {
+      try {
+        console.log('🗑️ [TOKEN DELETE] Lösche gespeicherten Git Token...');
+        
+        // Token aus Speicher entfernen
+        if (this.config.gitBackup) {
+          this.config.gitBackup.token = "";
+        }
+        
+        // Verschlüsselte Token-Datei löschen
+        if (fs.existsSync(this.secretsFile)) {
+          fs.unlinkSync(this.secretsFile);
+          console.log('✅ [TOKEN DELETE] Verschlüsselte Token-Datei gelöscht');
+        }
+        
+        res.json({ 
+          message: "Git Token erfolgreich gelöscht",
+          deleted: true
+        });
+      } catch (error) {
+        console.error('❌ [TOKEN DELETE] Fehler:', error);
+        res.status(500).json({ error: error.message });
+      }
     });
   }
   async getBackups(req, res) {
