@@ -11,6 +11,7 @@ const compression = require("compression");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const mysqldump = require("mysqldump");
+const crypto = require("crypto");
 
 class DatabaseBackupTool {
   constructor() {
