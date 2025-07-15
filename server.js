@@ -16,7 +16,7 @@ const crypto = require("crypto");
 class DatabaseBackupTool {
   constructor() {
     this.app = express();
-    this.secretsFile = path.join("./backups", '.git-secrets.enc'); // Temporärer Pfad
+    this.secretsFile = path.join("./backups", ".git-secrets.enc"); // Temporärer Pfad
     this.encryptionKey = "temporary-key"; // Temporärer Schlüssel
     this.config = this.loadConfig();
     this.users = new Map();
@@ -28,13 +28,19 @@ class DatabaseBackupTool {
     // Fest integriertes Update-Repository
     this.updateRepository = "https://github.com/brandy2307/db-backup-tool.git";
     this.updateBranch = "main";
-    
-    // Git Backup Repository Pfad
-    this.gitBackupPath = path.join(this.config.backup.defaultPath, "git-backup");
 
-    this.secretsFile = path.join(this.config.backup.defaultPath, '.git-secrets.enc');
+    // Git Backup Repository Pfad
+    this.gitBackupPath = path.join(
+      this.config.backup.defaultPath,
+      "git-backup"
+    );
+
+    this.secretsFile = path.join(
+      this.config.backup.defaultPath,
+      ".git-secrets.enc"
+    );
     this.encryptionKey = this.config.security.jwtSecret; // JWT Secret als Verschlüsselungsschlüssel
-    
+
     this.init();
   }
 
@@ -89,11 +95,11 @@ class DatabaseBackupTool {
         // Umgebungsvariable hat Priorität
         config.gitBackup = config.gitBackup || {};
         config.gitBackup.token = process.env.GIT_BACKUP_TOKEN;
-        console.log('🔑 [CONFIG] Git Token aus Umgebungsvariable geladen');
+        console.log("🔑 [CONFIG] Git Token aus Umgebungsvariable geladen");
       } else if (config.gitBackup && config.gitBackup.enabled) {
         // === NEU: VERZÖGERTES Token-Laden ===
         // Token wird später im init() geladen, wenn alle Pfade korrekt sind
-        console.log('⏳ [CONFIG] Token-Laden wird verzögert bis init()');
+        console.log("⏳ [CONFIG] Token-Laden wird verzögert bis init()");
       }
 
       // Repository-Informationen fest setzen (nicht überschreibbar)
@@ -110,43 +116,43 @@ class DatabaseBackupTool {
 
   encryptToken(token) {
     try {
-      const algorithm = 'aes-256-cbc';
-      const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
+      const algorithm = "aes-256-cbc";
+      const key = crypto.scryptSync(this.encryptionKey, "salt", 32);
       const iv = crypto.randomBytes(16);
-      
+
       const cipher = crypto.createCipher(algorithm, key);
-      let encrypted = cipher.update(token, 'utf8', 'hex');
-      encrypted += cipher.final('hex');
-      
+      let encrypted = cipher.update(token, "utf8", "hex");
+      encrypted += cipher.final("hex");
+
       // IV + verschlüsselte Daten kombinieren
-      return iv.toString('hex') + ':' + encrypted;
+      return iv.toString("hex") + ":" + encrypted;
     } catch (error) {
-      console.error('❌ [TOKEN CRYPTO] Verschlüsselung fehlgeschlagen:', error);
-      throw new Error('Token-Verschlüsselung fehlgeschlagen');
+      console.error("❌ [TOKEN CRYPTO] Verschlüsselung fehlgeschlagen:", error);
+      throw new Error("Token-Verschlüsselung fehlgeschlagen");
     }
   }
 
   decryptToken(encryptedData) {
     try {
-      const algorithm = 'aes-256-cbc';
-      const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
-      
+      const algorithm = "aes-256-cbc";
+      const key = crypto.scryptSync(this.encryptionKey, "salt", 32);
+
       // IV und verschlüsselte Daten trennen
-      const parts = encryptedData.split(':');
+      const parts = encryptedData.split(":");
       if (parts.length !== 2) {
-        throw new Error('Ungültiges verschlüsseltes Token-Format');
+        throw new Error("Ungültiges verschlüsseltes Token-Format");
       }
-      
-      const iv = Buffer.from(parts[0], 'hex');
+
+      const iv = Buffer.from(parts[0], "hex");
       const encrypted = parts[1];
-      
+
       const decipher = crypto.createDecipher(algorithm, key);
-      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-      
+      let decrypted = decipher.update(encrypted, "hex", "utf8");
+      decrypted += decipher.final("utf8");
+
       return decrypted;
     } catch (error) {
-      console.error('❌ [TOKEN CRYPTO] Entschlüsselung fehlgeschlagen:', error);
+      console.error("❌ [TOKEN CRYPTO] Entschlüsselung fehlgeschlagen:", error);
       return null;
     }
   }
@@ -156,35 +162,47 @@ class DatabaseBackupTool {
    */
   saveGitToken(token) {
     try {
-      console.log('🔐 [TOKEN SAVE] Speichere Git Token verschlüsselt...');
-      
-      if (!token || token.trim() === '') {
-        console.log('⚠️ [TOKEN SAVE] Leerer Token - lösche gespeicherten Token');
+      console.log("🔐 [TOKEN SAVE] Speichere Git Token verschlüsselt...");
+
+      if (!token || token.trim() === "") {
+        console.log(
+          "⚠️ [TOKEN SAVE] Leerer Token - lösche gespeicherten Token"
+        );
         if (fs.existsSync(this.secretsFile)) {
           fs.unlinkSync(this.secretsFile);
         }
         return;
       }
-      
+
       const encryptedToken = this.encryptToken(token.trim());
-      
+
       const secrets = {
-        version: '1.0',
+        version: "1.0",
         gitBackupToken: encryptedToken,
         savedAt: new Date().toISOString(),
         tokenLength: token.length,
-        checksum: crypto.createHash('sha256').update(token).digest('hex').substring(0, 8)
+        checksum: crypto
+          .createHash("sha256")
+          .update(token)
+          .digest("hex")
+          .substring(0, 8),
       };
-      
+
       // Datei mit restriktiven Berechtigungen erstellen
-      fs.writeFileSync(this.secretsFile, JSON.stringify(secrets, null, 2), { mode: 0o600 });
-      
-      console.log(`✅ [TOKEN SAVE] Git Token verschlüsselt gespeichert (${token.length} Zeichen)`);
+      fs.writeFileSync(this.secretsFile, JSON.stringify(secrets, null, 2), {
+        mode: 0o600,
+      });
+
+      console.log(
+        `✅ [TOKEN SAVE] Git Token verschlüsselt gespeichert (${token.length} Zeichen)`
+      );
       console.log(`📁 [TOKEN SAVE] Datei: ${this.secretsFile}`);
       console.log(`🔒 [TOKEN SAVE] Berechtigung: 600 (nur Besitzer lesbar)`);
-      
     } catch (error) {
-      console.error('❌ [TOKEN SAVE] Fehler beim Speichern des Git Tokens:', error);
+      console.error(
+        "❌ [TOKEN SAVE] Fehler beim Speichern des Git Tokens:",
+        error
+      );
       throw error;
     }
   }
@@ -195,53 +213,69 @@ class DatabaseBackupTool {
   loadGitToken() {
     try {
       if (!fs.existsSync(this.secretsFile)) {
-        console.log('📝 [TOKEN LOAD] Keine verschlüsselte Token-Datei gefunden');
+        console.log(
+          "📝 [TOKEN LOAD] Keine verschlüsselte Token-Datei gefunden"
+        );
         return null;
       }
-      
-      console.log('🔓 [TOKEN LOAD] Lade verschlüsselten Git Token...');
-      
-      const secretsData = fs.readFileSync(this.secretsFile, 'utf8');
+
+      console.log("🔓 [TOKEN LOAD] Lade verschlüsselten Git Token...");
+
+      const secretsData = fs.readFileSync(this.secretsFile, "utf8");
       const secrets = JSON.parse(secretsData);
-      
+
       if (!secrets.gitBackupToken) {
-        console.log('⚠️ [TOKEN LOAD] Keine Token-Daten in verschlüsselter Datei');
+        console.log(
+          "⚠️ [TOKEN LOAD] Keine Token-Daten in verschlüsselter Datei"
+        );
         return null;
       }
-      
+
       const decryptedToken = this.decryptToken(secrets.gitBackupToken);
-      
+
       if (decryptedToken) {
-        console.log(`✅ [TOKEN LOAD] Git Token erfolgreich entschlüsselt (${decryptedToken.length} Zeichen)`);
+        console.log(
+          `✅ [TOKEN LOAD] Git Token erfolgreich entschlüsselt (${decryptedToken.length} Zeichen)`
+        );
         console.log(`📅 [TOKEN LOAD] Gespeichert am: ${secrets.savedAt}`);
-        
+
         // Validiere Token-Integrität
-        const currentChecksum = crypto.createHash('sha256').update(decryptedToken).digest('hex').substring(0, 8);
+        const currentChecksum = crypto
+          .createHash("sha256")
+          .update(decryptedToken)
+          .digest("hex")
+          .substring(0, 8);
         if (secrets.checksum && secrets.checksum !== currentChecksum) {
-          console.error('❌ [TOKEN LOAD] Token-Checksum stimmt nicht überein - möglicherweise korrupt');
+          console.error(
+            "❌ [TOKEN LOAD] Token-Checksum stimmt nicht überein - möglicherweise korrupt"
+          );
           return null;
         }
-        
+
         return decryptedToken;
       } else {
-        console.error('❌ [TOKEN LOAD] Token-Entschlüsselung fehlgeschlagen');
+        console.error("❌ [TOKEN LOAD] Token-Entschlüsselung fehlgeschlagen");
         return null;
       }
-      
     } catch (error) {
-      console.error('❌ [TOKEN LOAD] Fehler beim Laden des Git Tokens:', error);
-      
+      console.error("❌ [TOKEN LOAD] Fehler beim Laden des Git Tokens:", error);
+
       // Bei Fehler: Backup der korrupten Datei erstellen
       if (fs.existsSync(this.secretsFile)) {
         const backupFile = `${this.secretsFile}.corrupt.${Date.now()}`;
         try {
           fs.copyFileSync(this.secretsFile, backupFile);
-          console.log(`📋 [TOKEN LOAD] Korrupte Token-Datei gesichert: ${backupFile}`);
+          console.log(
+            `📋 [TOKEN LOAD] Korrupte Token-Datei gesichert: ${backupFile}`
+          );
         } catch (backupError) {
-          console.error('❌ [TOKEN LOAD] Konnte korrupte Datei nicht sichern:', backupError);
+          console.error(
+            "❌ [TOKEN LOAD] Konnte korrupte Datei nicht sichern:",
+            backupError
+          );
         }
       }
-      
+
       return null;
     }
   }
@@ -256,101 +290,120 @@ class DatabaseBackupTool {
       secretsFilePath: this.secretsFile,
       canDecrypt: false,
       tokenLength: 0,
-      savedAt: null
+      savedAt: null,
     };
-    
+
     if (hasSecretsFile) {
       try {
-        const secretsData = fs.readFileSync(this.secretsFile, 'utf8');
+        const secretsData = fs.readFileSync(this.secretsFile, "utf8");
         const secrets = JSON.parse(secretsData);
-        
+
         tokenInfo.savedAt = secrets.savedAt;
         tokenInfo.tokenLength = secrets.tokenLength || 0;
-        
+
         // Teste Entschlüsselung
         const token = this.decryptToken(secrets.gitBackupToken);
         tokenInfo.canDecrypt = !!token;
-        
       } catch (error) {
         tokenInfo.error = error.message;
       }
     }
-    
+
     return tokenInfo;
   }
 
-
   async init() {
-  // Auto-Update beim Start ausführen
-  if (this.config.updates && this.config.updates.autoUpdate) {
-    console.log("🔄 Auto-Update ist aktiviert, prüfe auf Updates...");
-    await this.checkForUpdates();
+    // Auto-Update beim Start ausführen
+    if (this.config.updates && this.config.updates.autoUpdate) {
+      console.log("🔄 Auto-Update ist aktiviert, prüfe auf Updates...");
+      await this.checkForUpdates();
+    }
+
+    this.setupMiddleware();
+    this.setupRoutes();
+    this.setupDefaultUser();
+    this.ensureDirectories();
+
+    // NEU: Token aus .git-secrets.enc laden
+    const savedToken = this.loadGitToken();
+    if (savedToken && this.config.gitBackup) {
+      this.config.gitBackup.token = savedToken;
+      console.log(
+        `✅ [INIT] Git Token aus .git-secrets.enc geladen (${savedToken.length} Zeichen)`
+      );
+    } else {
+      console.warn("⚠️ [INIT] Kein gültiger Git Token beim Start geladen");
+    }
+
+    await this.initializeGitBackup();
+    this.loadSchedulesFromFile();
+    this.startServer();
   }
-
-  this.setupMiddleware();
-  this.setupRoutes();
-  this.setupDefaultUser();
-  this.ensureDirectories();
-
-  // NEU: Token aus .git-secrets.enc laden
-  const savedToken = this.loadGitToken();
-  if (savedToken && this.config.gitBackup) {
-    this.config.gitBackup.token = savedToken;
-    console.log(`✅ [INIT] Git Token aus .git-secrets.enc geladen (${savedToken.length} Zeichen)`);
-  } else {
-    console.warn("⚠️ [INIT] Kein gültiger Git Token beim Start geladen");
-  }
-
-  await this.initializeGitBackup();
-  this.loadSchedulesFromFile();
-  this.startServer();
-}
 
   // Enhanced execPromise mit detailliertem Debugging
-  execPromiseWithDebug(command, operation, hideOutput = false, timeout = 10000) {
+  execPromiseWithDebug(
+    command,
+    operation,
+    hideOutput = false,
+    timeout = 10000
+  ) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
-      console.log(`🔧 [${operation}] Starte: ${hideOutput ? '[COMMAND HIDDEN FOR SECURITY]' : command}`);
-      
+      console.log(
+        `🔧 [${operation}] Starte: ${
+          hideOutput ? "[COMMAND HIDDEN FOR SECURITY]" : command
+        }`
+      );
+
       const execTimeout = setTimeout(() => {
         console.error(`⏰ [${operation}] TIMEOUT nach ${timeout}ms`);
-        console.error(`   Command: ${hideOutput ? '[HIDDEN]' : command}`);
+        console.error(`   Command: ${hideOutput ? "[HIDDEN]" : command}`);
         reject(new Error(`${operation} timeout after ${timeout}ms`));
       }, timeout);
-      
-      exec(command, { 
-        cwd: process.cwd(),
-        env: { 
-          ...process.env, 
-          GIT_TERMINAL_PROMPT: '0',  // Verhindert interaktive Prompts
-          GIT_ASKPASS: 'echo',       // Leere Antworten für Passwort-Prompts
+
+      exec(
+        command,
+        {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: "0", // Verhindert interaktive Prompts
+            GIT_ASKPASS: "echo", // Leere Antworten für Passwort-Prompts
+          },
+        },
+        (error, stdout, stderr) => {
+          clearTimeout(execTimeout);
+          const duration = Date.now() - startTime;
+
+          if (error) {
+            console.error(`❌ [${operation}] FEHLER nach ${duration}ms:`);
+            console.error(`   Exit Code: ${error.code}`);
+            console.error(`   Error Message: ${error.message}`);
+            if (stderr) {
+              console.error(`   Stderr: ${stderr}`);
+            }
+            if (stdout && !hideOutput) {
+              console.error(`   Stdout: ${stdout}`);
+            }
+            reject(
+              new Error(
+                `${operation} failed: ${error.message}${
+                  stderr ? ` | Stderr: ${stderr}` : ""
+                }`
+              )
+            );
+          } else {
+            console.log(`✅ [${operation}] ERFOLG nach ${duration}ms`);
+            if (stdout && !hideOutput) {
+              console.log(`   Output: ${stdout.trim()}`);
+            }
+            if (stderr && !hideOutput) {
+              console.log(`   Stderr (non-fatal): ${stderr.trim()}`);
+            }
+            resolve(stdout);
+          }
         }
-      }, (error, stdout, stderr) => {
-        clearTimeout(execTimeout);
-        const duration = Date.now() - startTime;
-        
-        if (error) {
-          console.error(`❌ [${operation}] FEHLER nach ${duration}ms:`);
-          console.error(`   Exit Code: ${error.code}`);
-          console.error(`   Error Message: ${error.message}`);
-          if (stderr) {
-            console.error(`   Stderr: ${stderr}`);
-          }
-          if (stdout && !hideOutput) {
-            console.error(`   Stdout: ${stdout}`);
-          }
-          reject(new Error(`${operation} failed: ${error.message}${stderr ? ` | Stderr: ${stderr}` : ''}`));
-        } else {
-          console.log(`✅ [${operation}] ERFOLG nach ${duration}ms`);
-          if (stdout && !hideOutput) {
-            console.log(`   Output: ${stdout.trim()}`);
-          }
-          if (stderr && !hideOutput) {
-            console.log(`   Stderr (non-fatal): ${stderr.trim()}`);
-          }
-          resolve(stdout);
-        }
-      });
+      );
     });
   }
 
@@ -358,21 +411,44 @@ class DatabaseBackupTool {
   debugGitConfiguration() {
     console.log("🔍 [GIT DEBUG] Vollständige Git Konfiguration:");
     console.log("================================");
-    console.log(`   config.gitBackup: ${JSON.stringify(this.config.gitBackup, (key, value) => {
-      if (key === 'token' && value) return '[HIDDEN_' + value.length + '_CHARS]';
-      return value;
-    }, 2)}`);
+    console.log(
+      `   config.gitBackup: ${JSON.stringify(
+        this.config.gitBackup,
+        (key, value) => {
+          if (key === "token" && value)
+            return "[HIDDEN_" + value.length + "_CHARS]";
+          return value;
+        },
+        2
+      )}`
+    );
     console.log("================================");
-    
+
     // Umgebungsvariablen prüfen
     console.log("🔍 [GIT DEBUG] Umgebungsvariablen:");
-    console.log(`   GIT_BACKUP_ENABLED: ${process.env.GIT_BACKUP_ENABLED || 'NOT SET'}`);
-    console.log(`   GIT_BACKUP_REPOSITORY: ${process.env.GIT_BACKUP_REPOSITORY || 'NOT SET'}`);
-    console.log(`   GIT_BACKUP_USERNAME: ${process.env.GIT_BACKUP_USERNAME || 'NOT SET'}`);
-    console.log(`   GIT_BACKUP_TOKEN: ${process.env.GIT_BACKUP_TOKEN ? '[SET_' + process.env.GIT_BACKUP_TOKEN.length + '_CHARS]' : 'NOT SET'}`);
-    console.log(`   GIT_BACKUP_BRANCH: ${process.env.GIT_BACKUP_BRANCH || 'NOT SET'}`);
+    console.log(
+      `   GIT_BACKUP_ENABLED: ${process.env.GIT_BACKUP_ENABLED || "NOT SET"}`
+    );
+    console.log(
+      `   GIT_BACKUP_REPOSITORY: ${
+        process.env.GIT_BACKUP_REPOSITORY || "NOT SET"
+      }`
+    );
+    console.log(
+      `   GIT_BACKUP_USERNAME: ${process.env.GIT_BACKUP_USERNAME || "NOT SET"}`
+    );
+    console.log(
+      `   GIT_BACKUP_TOKEN: ${
+        process.env.GIT_BACKUP_TOKEN
+          ? "[SET_" + process.env.GIT_BACKUP_TOKEN.length + "_CHARS]"
+          : "NOT SET"
+      }`
+    );
+    console.log(
+      `   GIT_BACKUP_BRANCH: ${process.env.GIT_BACKUP_BRANCH || "NOT SET"}`
+    );
     console.log("================================");
-    
+
     // Token-spezifisches Debugging
     this.debugTokenStatus();
     console.log("================================");
@@ -382,41 +458,60 @@ class DatabaseBackupTool {
   debugTokenStatus() {
     console.log("🔍 [TOKEN DEBUG] Token Status:");
     console.log(`   config.gitBackup exists: ${!!this.config.gitBackup}`);
-    console.log(`   config.gitBackup.token exists: ${!!this.config.gitBackup?.token}`);
-    console.log(`   config.gitBackup.token length: ${this.config.gitBackup?.token?.length || 0}`);
-    console.log(`   config.gitBackup.token type: ${typeof this.config.gitBackup?.token}`);
-    
+    console.log(
+      `   config.gitBackup.token exists: ${!!this.config.gitBackup?.token}`
+    );
+    console.log(
+      `   config.gitBackup.token length: ${
+        this.config.gitBackup?.token?.length || 0
+      }`
+    );
+    console.log(
+      `   config.gitBackup.token type: ${typeof this.config.gitBackup?.token}`
+    );
+
     // Umgebungsvariable auch prüfen
-    console.log(`   process.env.GIT_BACKUP_TOKEN exists: ${!!process.env.GIT_BACKUP_TOKEN}`);
-    console.log(`   process.env.GIT_BACKUP_TOKEN length: ${process.env.GIT_BACKUP_TOKEN?.length || 0}`);
+    console.log(
+      `   process.env.GIT_BACKUP_TOKEN exists: ${!!process.env
+        .GIT_BACKUP_TOKEN}`
+    );
+    console.log(
+      `   process.env.GIT_BACKUP_TOKEN length: ${
+        process.env.GIT_BACKUP_TOKEN?.length || 0
+      }`
+    );
   }
 
   // Verbesserte buildGitRemoteUrl mit Debug
   buildGitRemoteUrl() {
-    console.log("🔍 [GIT URL] Starte Git Remote URL Erstellung (GitHub Fix)...");
-    
+    console.log(
+      "🔍 [GIT URL] Starte Git Remote URL Erstellung (GitHub Fix)..."
+    );
+
     // Debug: Komplette Konfiguration ausgeben
     this.debugGitConfiguration();
-    
+
     const gitConfig = this.config.gitBackup || {};
     const { repository, username, token } = gitConfig;
-    
+
     console.log("🔍 [GIT URL] Extrahierte Werte:");
-    console.log(`   Repository: '${repository || 'EMPTY'}'`);
-    console.log(`   Username: '${username || 'EMPTY'}'`);
-    console.log(`   Token: ${token ? '[SET_' + token.length + '_CHARS]' : 'EMPTY'}`);
-    
+    console.log(`   Repository: '${repository || "EMPTY"}'`);
+    console.log(`   Username: '${username || "EMPTY"}'`);
+    console.log(
+      `   Token: ${token ? "[SET_" + token.length + "_CHARS]" : "EMPTY"}`
+    );
+
     // Validierung
     if (!repository) {
       console.error("❌ [GIT URL] Repository URL ist leer oder undefined!");
       return null;
     }
-    
+
     if (!token) {
       console.error("❌ [GIT URL] Token ist leer oder undefined!");
       return null;
     }
-    
+
     try {
       // URL parsen und validieren
       const url = new URL(repository);
@@ -424,96 +519,123 @@ class DatabaseBackupTool {
       console.log(`   Protocol: ${url.protocol}`);
       console.log(`   Host: ${url.host}`);
       console.log(`   Pathname: ${url.pathname}`);
-      
+
       // GitHub-spezifische Authentifizierung
       let authenticatedUrl;
-      
-      if (url.host.includes('github.com')) {
-        console.log("🔍 [GIT URL] GitHub erkannt - verwende Token-basierte Authentifizierung");
-        
+
+      if (url.host.includes("github.com")) {
+        console.log(
+          "🔍 [GIT URL] GitHub erkannt - verwende Token-basierte Authentifizierung"
+        );
+
         // Für GitHub: Token als Username, kein Passwort
         // Format: https://TOKEN@github.com/user/repo.git
         const encodedToken = encodeURIComponent(token);
         authenticatedUrl = `${url.protocol}//${encodedToken}@${url.host}${url.pathname}`;
-        
+
         console.log(`✅ [GIT URL] GitHub-Token Authentifizierung konfiguriert`);
-        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[TOKEN]@${url.host}${url.pathname}`);
-        
-      } else if (url.host.includes('gitlab.com')) {
-        console.log("🔍 [GIT URL] GitLab erkannt - verwende Username:Token Authentifizierung");
-        
+        console.log(
+          `🔍 [GIT URL] URL Format: ${url.protocol}//[TOKEN]@${url.host}${url.pathname}`
+        );
+      } else if (url.host.includes("gitlab.com")) {
+        console.log(
+          "🔍 [GIT URL] GitLab erkannt - verwende Username:Token Authentifizierung"
+        );
+
         // Für GitLab: Username:Token Format
-        const encodedUsername = encodeURIComponent(username || 'oauth2');
+        const encodedUsername = encodeURIComponent(username || "oauth2");
         const encodedToken = encodeURIComponent(token);
         authenticatedUrl = `${url.protocol}//${encodedUsername}:${encodedToken}@${url.host}${url.pathname}`;
-        
-        console.log(`✅ [GIT URL] GitLab Username:Token Authentifizierung konfiguriert`);
-        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[TOKEN]@${url.host}${url.pathname}`);
-        
-      } else if (url.host.includes('bitbucket.org')) {
-        console.log("🔍 [GIT URL] Bitbucket erkannt - verwende Username:AppPassword Authentifizierung");
-        
+
+        console.log(
+          `✅ [GIT URL] GitLab Username:Token Authentifizierung konfiguriert`
+        );
+        console.log(
+          `🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[TOKEN]@${url.host}${url.pathname}`
+        );
+      } else if (url.host.includes("bitbucket.org")) {
+        console.log(
+          "🔍 [GIT URL] Bitbucket erkannt - verwende Username:AppPassword Authentifizierung"
+        );
+
         // Für Bitbucket: Username:AppPassword Format
         if (!username) {
-          console.error("❌ [GIT URL] Username ist für Bitbucket erforderlich!");
+          console.error(
+            "❌ [GIT URL] Username ist für Bitbucket erforderlich!"
+          );
           return null;
         }
-        
+
         const encodedUsername = encodeURIComponent(username);
         const encodedToken = encodeURIComponent(token);
         authenticatedUrl = `${url.protocol}//${encodedUsername}:${encodedToken}@${url.host}${url.pathname}`;
-        
-        console.log(`✅ [GIT URL] Bitbucket Username:AppPassword Authentifizierung konfiguriert`);
-        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[APPPASSWORD]@${url.host}${url.pathname}`);
-        
+
+        console.log(
+          `✅ [GIT URL] Bitbucket Username:AppPassword Authentifizierung konfiguriert`
+        );
+        console.log(
+          `🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[APPPASSWORD]@${url.host}${url.pathname}`
+        );
       } else {
-        console.log("🔍 [GIT URL] Unbekannter Git-Provider - verwende Standard Username:Token Format");
-        
+        console.log(
+          "🔍 [GIT URL] Unbekannter Git-Provider - verwende Standard Username:Token Format"
+        );
+
         // Für andere Provider: Standard Username:Token
-        const encodedUsername = encodeURIComponent(username || 'git');
+        const encodedUsername = encodeURIComponent(username || "git");
         const encodedToken = encodeURIComponent(token);
         authenticatedUrl = `${url.protocol}//${encodedUsername}:${encodedToken}@${url.host}${url.pathname}`;
-        
-        console.log(`✅ [GIT URL] Standard Username:Token Authentifizierung konfiguriert`);
-        console.log(`🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[TOKEN]@${url.host}${url.pathname}`);
+
+        console.log(
+          `✅ [GIT URL] Standard Username:Token Authentifizierung konfiguriert`
+        );
+        console.log(
+          `🔍 [GIT URL] URL Format: ${url.protocol}//[USERNAME]:[TOKEN]@${url.host}${url.pathname}`
+        );
       }
-      
+
       console.log(`✅ [GIT URL] Authentifizierte URL für ${url.host} erstellt`);
       return authenticatedUrl;
-      
     } catch (error) {
-      console.error("❌ [GIT URL] Fehler beim Parsen der Repository URL:", error);
+      console.error(
+        "❌ [GIT URL] Fehler beim Parsen der Repository URL:",
+        error
+      );
       console.error(`   Repository Wert: '${repository}'`);
       return null;
     }
   }
 
-// ZUSÄTZLICH: Erweiterte Validierung für Git-Provider
-// Füge diese Methode auch hinzu:
+  // ZUSÄTZLICH: Erweiterte Validierung für Git-Provider
+  // Füge diese Methode auch hinzu:
 
   // Validiere Git-Provider spezifische Konfiguration
   validateGitProviderConfig(repository, username, token) {
     const issues = [];
-    
+
     try {
       const url = new URL(repository);
-      
-      if (url.host.includes('github.com')) {
+
+      if (url.host.includes("github.com")) {
         // GitHub braucht nur Token
         if (!token) {
           issues.push("GitHub Personal Access Token ist erforderlich");
         }
-        if (token && !token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
-          issues.push("GitHub Token sollte mit 'ghp_' oder 'github_pat_' beginnen");
+        if (
+          token &&
+          !token.startsWith("ghp_") &&
+          !token.startsWith("github_pat_")
+        ) {
+          issues.push(
+            "GitHub Token sollte mit 'ghp_' oder 'github_pat_' beginnen"
+          );
         }
-        
-      } else if (url.host.includes('gitlab.com')) {
+      } else if (url.host.includes("gitlab.com")) {
         // GitLab braucht Token, Username ist optional
         if (!token) {
           issues.push("GitLab Personal Access Token ist erforderlich");
         }
-        
-      } else if (url.host.includes('bitbucket.org')) {
+      } else if (url.host.includes("bitbucket.org")) {
         // Bitbucket braucht Username und App Password
         if (!username) {
           issues.push("Bitbucket Username ist erforderlich");
@@ -521,18 +643,16 @@ class DatabaseBackupTool {
         if (!token) {
           issues.push("Bitbucket App Password ist erforderlich");
         }
-        
       } else {
         // Andere Provider
         if (!token) {
           issues.push("Personal Access Token ist erforderlich");
         }
       }
-      
     } catch (error) {
       issues.push("Repository URL ist ungültig");
     }
-    
+
     return issues;
   }
 
@@ -540,22 +660,24 @@ class DatabaseBackupTool {
   generateGitDebugInfo() {
     const gitBackupEnabled = this.config.gitBackup?.enabled || false;
     const gitConfig = this.config.gitBackup || {};
-    
+
     return {
       enabled: gitBackupEnabled,
-      repository: gitConfig.repository || 'NOT SET',
-      username: gitConfig.username ? 'SET' : 'NOT SET',
-      token: gitConfig.token ? `SET (${gitConfig.token.length} chars)` : 'NOT SET',
-      branch: gitConfig.branch || 'main',
+      repository: gitConfig.repository || "NOT SET",
+      username: gitConfig.username ? "SET" : "NOT SET",
+      token: gitConfig.token
+        ? `SET (${gitConfig.token.length} chars)`
+        : "NOT SET",
+      branch: gitConfig.branch || "main",
       gitBackupPath: this.gitBackupPath,
       gitBackupPathExists: fs.existsSync(this.gitBackupPath),
-      gitRepositoryExists: fs.existsSync(path.join(this.gitBackupPath, '.git')),
+      gitRepositoryExists: fs.existsSync(path.join(this.gitBackupPath, ".git")),
       systemInfo: {
         nodeVersion: process.version,
         platform: process.platform,
         arch: process.arch,
-        cwd: process.cwd()
-      }
+        cwd: process.cwd(),
+      },
     };
   }
 
@@ -564,37 +686,48 @@ class DatabaseBackupTool {
     const config = this.config.gitBackup || {};
     const issues = [];
     const suggestions = [];
-    
+
     if (!config.enabled) {
       issues.push("Git Backup ist deaktiviert");
       suggestions.push("Aktiviere Git Backup im Web-Interface");
     }
-    
+
     if (!config.repository) {
       issues.push("Repository URL ist nicht gesetzt");
-      suggestions.push("Setze eine gültige HTTPS Repository URL (z.B. https://github.com/username/repo.git)");
+      suggestions.push(
+        "Setze eine gültige HTTPS Repository URL (z.B. https://github.com/username/repo.git)"
+      );
     }
-    
+
     if (!config.username) {
       issues.push("Git Username ist nicht gesetzt");
       suggestions.push("Setze deinen Git-Benutzernamen");
     }
-    
+
     if (!config.token) {
       issues.push("Personal Access Token ist nicht gesetzt");
-      suggestions.push("Erstelle einen Personal Access Token mit 'repo' Berechtigung");
+      suggestions.push(
+        "Erstelle einen Personal Access Token mit 'repo' Berechtigung"
+      );
     }
-    
+
     if (!fs.existsSync(this.gitBackupPath)) {
       issues.push("Git Backup Verzeichnis existiert nicht");
-      suggestions.push("Das Verzeichnis wird automatisch erstellt - prüfe Dateiberechtigungen");
+      suggestions.push(
+        "Das Verzeichnis wird automatisch erstellt - prüfe Dateiberechtigungen"
+      );
     }
-    
-    if (fs.existsSync(this.gitBackupPath) && !fs.existsSync(path.join(this.gitBackupPath, '.git'))) {
+
+    if (
+      fs.existsSync(this.gitBackupPath) &&
+      !fs.existsSync(path.join(this.gitBackupPath, ".git"))
+    ) {
       issues.push("Git Repository ist nicht initialisiert");
-      suggestions.push("Das Repository wird automatisch initialisiert - prüfe Git-Installation");
+      suggestions.push(
+        "Das Repository wird automatisch initialisiert - prüfe Git-Installation"
+      );
     }
-    
+
     return {
       issues: issues,
       suggestions: suggestions,
@@ -602,8 +735,8 @@ class DatabaseBackupTool {
         "1. Überprüfe die Git Backup Konfiguration im Web-Interface",
         "2. Stelle sicher, dass das Repository existiert und zugänglich ist",
         "3. Verwende den 'Verbindung testen' Button",
-        "4. Prüfe die Server-Logs für detaillierte Fehlermeldungen"
-      ]
+        "4. Prüfe die Server-Logs für detaillierte Fehlermeldungen",
+      ],
     };
   }
   // Verbesserte Git Repository Initialisierung mit robuster URL-Behandlung
@@ -616,10 +749,10 @@ class DatabaseBackupTool {
     try {
       console.log("🔧 Initialisiere Git Backup Repository...");
       console.log(`📁 Git Backup Pfad: ${this.gitBackupPath}`);
-      
+
       // Debug-Ausgabe der Konfiguration
       this.debugGitConfiguration();
-      
+
       // Git Backup Verzeichnis erstellen falls nicht vorhanden
       if (!fs.existsSync(this.gitBackupPath)) {
         console.log("📁 Erstelle Git Backup Verzeichnis...");
@@ -627,119 +760,208 @@ class DatabaseBackupTool {
       }
 
       const isGitRepo = fs.existsSync(path.join(this.gitBackupPath, ".git"));
-      console.log(`🔍 Git Repository Status: ${isGitRepo ? 'Existiert' : 'Nicht initialisiert'}`);
-      
+      console.log(
+        `🔍 Git Repository Status: ${
+          isGitRepo ? "Existiert" : "Nicht initialisiert"
+        }`
+      );
+
       if (!isGitRepo) {
         console.log("📁 Erstelle neues Git Repository für Backups...");
-        
+
         // Git Repository initialisieren
-        await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git init`, "Git Init");
-        await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git config user.name "DB Backup Tool"`, "Git Config Name");
-        await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git config user.email "backup@localhost"`, "Git Config Email");
-        
+        await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git init`,
+          "Git Init"
+        );
+        await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git config user.name "DB Backup Tool"`,
+          "Git Config Name"
+        );
+        await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git config user.email "backup@localhost"`,
+          "Git Config Email"
+        );
+
         // README erstellen
-        const readmeContent = `# Database Backups\n\nAutomatisch erstellte Datenbank-Backups vom DB Backup Tool.\n\nErstellt am: ${new Date().toLocaleString('de-DE')}\n`;
-        fs.writeFileSync(path.join(this.gitBackupPath, "README.md"), readmeContent);
+        const readmeContent = `# Database Backups\n\nAutomatisch erstellte Datenbank-Backups vom DB Backup Tool.\n\nErstellt am: ${new Date().toLocaleString(
+          "de-DE"
+        )}\n`;
+        fs.writeFileSync(
+          path.join(this.gitBackupPath, "README.md"),
+          readmeContent
+        );
         console.log("📝 README.md erstellt");
-        
-        await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git add README.md`, "Git Add README");
-        await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git commit -m "Initial commit: Setup backup repository"`, "Git Initial Commit");
+
+        await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git add README.md`,
+          "Git Add README"
+        );
+        await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git commit -m "Initial commit: Setup backup repository"`,
+          "Git Initial Commit"
+        );
       }
 
       // Remote Repository Setup - Der kritische Teil!
       if (this.config.gitBackup.repository) {
         console.log("🔗 [GIT REMOTE] Starte Remote Repository Setup...");
-        
+
         const remoteUrl = this.buildGitRemoteUrl();
-        
+
         if (!remoteUrl) {
-          console.error("❌ [GIT REMOTE] Konnte authentifizierte Git Remote URL nicht erstellen");
+          console.error(
+            "❌ [GIT REMOTE] Konnte authentifizierte Git Remote URL nicht erstellen"
+          );
           console.error("   Mögliche Ursachen:");
           console.error("   1. Repository URL fehlt oder ist ungültig");
           console.error("   2. Username ist nicht gesetzt");
           console.error("   3. Personal Access Token ist nicht gesetzt");
           return;
         }
-        
+
         try {
           // Prüfe ob remote bereits existiert
-          console.log("🔍 [GIT REMOTE] Prüfe bestehende Remote-Konfiguration...");
-          const currentRemote = await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote get-url origin`, "Check Remote", false);
+          console.log(
+            "🔍 [GIT REMOTE] Prüfe bestehende Remote-Konfiguration..."
+          );
+          const currentRemote = await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git remote get-url origin`,
+            "Check Remote",
+            false
+          );
           console.log(`🔗 [GIT REMOTE] Bestehender Remote gefunden`);
-          
+
           // Remote URL aktualisieren mit neuer authentifizierter URL
-          console.log("🔄 [GIT REMOTE] Aktualisiere Remote URL mit Authentifizierung...");
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote set-url origin "${remoteUrl}"`, "Update Remote URL", true);
-          console.log("✅ [GIT REMOTE] Remote URL mit Authentifizierung aktualisiert");
-          
+          console.log(
+            "🔄 [GIT REMOTE] Aktualisiere Remote URL mit Authentifizierung..."
+          );
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git remote set-url origin "${remoteUrl}"`,
+            "Update Remote URL",
+            true
+          );
+          console.log(
+            "✅ [GIT REMOTE] Remote URL mit Authentifizierung aktualisiert"
+          );
         } catch (error) {
           // Remote existiert nicht, füge hinzu
-          console.log("🔗 [GIT REMOTE] Kein Remote vorhanden, füge neuen mit Authentifizierung hinzu...");
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote add origin "${remoteUrl}"`, "Add Remote", true);
-          console.log("✅ [GIT REMOTE] Neuer Remote mit Authentifizierung hinzugefügt");
+          console.log(
+            "🔗 [GIT REMOTE] Kein Remote vorhanden, füge neuen mit Authentifizierung hinzu..."
+          );
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git remote add origin "${remoteUrl}"`,
+            "Add Remote",
+            true
+          );
+          console.log(
+            "✅ [GIT REMOTE] Neuer Remote mit Authentifizierung hinzugefügt"
+          );
         }
 
         // Validiere Remote URL (ohne Token anzuzeigen)
         try {
-          const finalRemoteCheck = await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote get-url origin`, "Final Remote Check", true);
+          const finalRemoteCheck = await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git remote get-url origin`,
+            "Final Remote Check",
+            true
+          );
           console.log("✅ [GIT REMOTE] Remote URL erfolgreich konfiguriert");
         } catch (remoteCheckError) {
-          console.error("❌ [GIT REMOTE] Remote URL Validation fehlgeschlagen:", remoteCheckError);
+          console.error(
+            "❌ [GIT REMOTE] Remote URL Validation fehlgeschlagen:",
+            remoteCheckError
+          );
         }
 
         // Branch konfigurieren
         const branch = this.config.gitBackup.branch || "main";
         console.log(`🌿 [GIT BRANCH] Konfiguriere Branch: ${branch}`);
-        
+
         try {
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git checkout -B ${branch}`, "Checkout Branch");
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git checkout -B ${branch}`,
+            "Checkout Branch"
+          );
           console.log(`✅ [GIT BRANCH] Branch ${branch} konfiguriert`);
         } catch (error) {
-          console.log(`⚠️ [GIT BRANCH] Branch checkout fehlgeschlagen: ${error.message}`);
+          console.log(
+            `⚠️ [GIT BRANCH] Branch checkout fehlgeschlagen: ${error.message}`
+          );
         }
-        
+
         // KRITISCHER TEST: Erster Push mit authentifizierter URL
         try {
           console.log("🧪 [GIT TEST] Teste authentifizierten Push...");
-          console.log("   WICHTIG: Dies ist der Test, ob die Authentifizierung funktioniert!");
-          
+          console.log(
+            "   WICHTIG: Dies ist der Test, ob die Authentifizierung funktioniert!"
+          );
+
           // Längerer Timeout für ersten Push
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git push -u origin ${branch}`, "Authenticated Push Test", true, 60000);
-          console.log("✅ [GIT TEST] Authentifizierter Push erfolgreich - Git Backup voll funktionsfähig!");
-          
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git push -u origin ${branch}`,
+            "Authenticated Push Test",
+            true,
+            60000
+          );
+          console.log(
+            "✅ [GIT TEST] Authentifizierter Push erfolgreich - Git Backup voll funktionsfähig!"
+          );
         } catch (error) {
           console.error("❌ [GIT TEST] Authentifizierter Push fehlgeschlagen:");
           console.error(`   Fehler: ${error.message}`);
           console.error("   DIAGNOSE:");
-          
+
           if (error.message.includes("Username for")) {
-            console.error("   → Git fragt immer noch nach Username - Authentifizierung wurde nicht übernommen!");
+            console.error(
+              "   → Git fragt immer noch nach Username - Authentifizierung wurde nicht übernommen!"
+            );
             console.error("   → Mögliche Ursachen:");
             console.error("     1. Token ist ungültig oder abgelaufen");
-            console.error("     2. Token hat nicht die richtige Berechtigung ('repo')");
+            console.error(
+              "     2. Token hat nicht die richtige Berechtigung ('repo')"
+            );
             console.error("     3. Username ist falsch");
-            console.error("     4. Repository existiert nicht oder ist nicht zugänglich");
+            console.error(
+              "     4. Repository existiert nicht oder ist nicht zugänglich"
+            );
           } else if (error.message.includes("timeout")) {
-            console.error("   → Timeout - möglicherweise Netzwerkproblem oder Git Server langsam");
+            console.error(
+              "   → Timeout - möglicherweise Netzwerkproblem oder Git Server langsam"
+            );
           } else if (error.message.includes("remote rejected")) {
-            console.error("   → Remote hat Push abgelehnt - prüfe Repository-Berechtigungen");
+            console.error(
+              "   → Remote hat Push abgelehnt - prüfe Repository-Berechtigungen"
+            );
           }
-          
+
           // Versuche einen einfachen Push ohne -u Flag
           try {
-            console.log("🔄 [GIT TEST] Versuche einfachen Push ohne -u Flag...");
-            await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git push origin ${branch}`, "Simple Authenticated Push", true, 30000);
-            console.log("✅ [GIT TEST] Einfacher authentifizierter Push erfolgreich!");
+            console.log(
+              "🔄 [GIT TEST] Versuche einfachen Push ohne -u Flag..."
+            );
+            await this.execPromiseWithDebug(
+              `cd "${this.gitBackupPath}" && git push origin ${branch}`,
+              "Simple Authenticated Push",
+              true,
+              30000
+            );
+            console.log(
+              "✅ [GIT TEST] Einfacher authentifizierter Push erfolgreich!"
+            );
           } catch (simplePushError) {
             console.error("❌ [GIT TEST] Auch einfacher Push fehlgeschlagen:");
             console.error(`   Fehler: ${simplePushError.message}`);
-            console.error("   → Git Backup wird nicht funktionieren bis das Problem behoben ist!");
+            console.error(
+              "   → Git Backup wird nicht funktionieren bis das Problem behoben ist!"
+            );
           }
         }
       }
-
     } catch (error) {
-      console.error("❌ Fehler beim Initialisieren des Git Backup Repositories:");
+      console.error(
+        "❌ Fehler beim Initialisieren des Git Backup Repositories:"
+      );
       console.error(`   Fehler: ${error.message}`);
       console.error(`   Stack: ${error.stack}`);
     }
@@ -764,7 +986,9 @@ class DatabaseBackupTool {
       }
 
       if (!fs.existsSync(this.gitBackupPath)) {
-        throw new Error(`Git Backup Verzeichnis nicht gefunden: ${this.gitBackupPath}`);
+        throw new Error(
+          `Git Backup Verzeichnis nicht gefunden: ${this.gitBackupPath}`
+        );
       }
 
       if (!fs.existsSync(path.join(this.gitBackupPath, ".git"))) {
@@ -777,32 +1001,54 @@ class DatabaseBackupTool {
 
       // Git Status prüfen
       console.log("🔍 [GIT PUSH] Prüfe Git Status...");
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git status --porcelain`, "Git Status Check");
-      
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git status --porcelain`,
+        "Git Status Check"
+      );
+
       // Remote URL validieren (ohne Token anzuzeigen)
       console.log("🔗 [GIT PUSH] Validiere Remote URL...");
       try {
-        const remoteUrl = await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote get-url origin`, "Get Remote URL", true);
-        
+        const remoteUrl = await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git remote get-url origin`,
+          "Get Remote URL",
+          true
+        );
+
         // Prüfe ob Remote URL Authentifizierung enthält
-        if (remoteUrl.includes('@')) {
+        if (remoteUrl.includes("@")) {
           console.log("✅ [GIT PUSH] Remote URL enthält Authentifizierung");
         } else {
-          console.error("❌ [GIT PUSH] Remote URL enthält KEINE Authentifizierung!");
-          console.error("   → Das ist wahrscheinlich die Ursache für den Username-Prompt!");
-          
+          console.error(
+            "❌ [GIT PUSH] Remote URL enthält KEINE Authentifizierung!"
+          );
+          console.error(
+            "   → Das ist wahrscheinlich die Ursache für den Username-Prompt!"
+          );
+
           // Versuche Remote URL zu reparieren
           console.log("🔄 [GIT PUSH] Versuche Remote URL zu reparieren...");
           const newRemoteUrl = this.buildGitRemoteUrl();
           if (newRemoteUrl) {
-            await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote set-url origin "${newRemoteUrl}"`, "Fix Remote URL", true);
-            console.log("✅ [GIT PUSH] Remote URL mit Authentifizierung repariert");
+            await this.execPromiseWithDebug(
+              `cd "${this.gitBackupPath}" && git remote set-url origin "${newRemoteUrl}"`,
+              "Fix Remote URL",
+              true
+            );
+            console.log(
+              "✅ [GIT PUSH] Remote URL mit Authentifizierung repariert"
+            );
           } else {
-            throw new Error("Konnte Remote URL nicht reparieren - Git Konfiguration ist unvollständig");
+            throw new Error(
+              "Konnte Remote URL nicht reparieren - Git Konfiguration ist unvollständig"
+            );
           }
         }
       } catch (remoteError) {
-        console.error("❌ [GIT PUSH] Remote URL Validation fehlgeschlagen:", remoteError);
+        console.error(
+          "❌ [GIT PUSH] Remote URL Validation fehlgeschlagen:",
+          remoteError
+        );
         throw new Error("Git Remote ist nicht korrekt konfiguriert");
       }
 
@@ -810,58 +1056,89 @@ class DatabaseBackupTool {
       console.log("📁 [GIT PUSH] Kopiere Backup-Datei...");
       const gitBackupFile = path.join(this.gitBackupPath, filename);
       fs.copyFileSync(backupFilePath, gitBackupFile);
-      
+
       const stats = fs.statSync(gitBackupFile);
-      console.log(`✅ [GIT PUSH] Datei kopiert (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
-      
+      console.log(
+        `✅ [GIT PUSH] Datei kopiert (${(stats.size / 1024 / 1024).toFixed(
+          2
+        )} MB)`
+      );
+
       // Git Add
       console.log("➕ [GIT PUSH] Git Add...");
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git add "${filename}"`, "Git Add");
-      
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git add "${filename}"`,
+        "Git Add"
+      );
+
       // Git Commit
-      const commitMessage = `Add backup: ${filename} (${new Date().toLocaleString('de-DE')})`;
+      const commitMessage = `Add backup: ${filename} (${new Date().toLocaleString(
+        "de-DE"
+      )})`;
       console.log("💾 [GIT PUSH] Git Commit...");
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`, "Git Commit");
-      
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`,
+        "Git Commit"
+      );
+
       // Git Push - Der kritische Teil!
       const branch = this.config.gitBackup.branch || "main";
       console.log(`🚀 [GIT PUSH] Git Push zu Branch: ${branch}`);
-      console.log("   Dies ist der kritische Schritt - detailliertes Logging aktiv...");
+      console.log(
+        "   Dies ist der kritische Schritt - detailliertes Logging aktiv..."
+      );
       console.log("   Timeout: 60 Sekunden");
-      
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git pull --rebase origin ${branch}`, "Git Pull (Rebase)", true);
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git push origin ${branch}`, "Git Push", true, 60000);
-      
+
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git pull --rebase origin ${branch}`,
+        "Git Pull (Rebase)",
+        true
+      );
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git push origin ${branch}`,
+        "Git Push",
+        true,
+        60000
+      );
+
       const duration = Date.now() - startTime;
       console.log(`✅ [GIT PUSH] ERFOLGREICH abgeschlossen nach ${duration}ms`);
       console.log(`   Datei: ${filename} erfolgreich zu Git gepusht`);
-      
+
       // Cleanup alte Backups im Git Repository
       await this.cleanupGitBackups();
-      
+
       return { success: true, duration: duration };
-      
     } catch (error) {
       const duration = Date.now() - startTime;
       console.error(`❌ [GIT PUSH] FEHLGESCHLAGEN nach ${duration}ms`);
       console.error(`   Datei: ${filename}`);
       console.error(`   Fehler: ${error.message}`);
       console.error(`   Stack: ${error.stack}`);
-      
+
       // Zusätzliche Diagnose-Informationen
       try {
         console.log("🔍 [GIT PUSH] Zusätzliche Diagnose...");
-        const gitStatus = await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git status`, "Post-Error Git Status");
+        const gitStatus = await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git status`,
+          "Post-Error Git Status"
+        );
         console.log("📊 [GIT PUSH] Git Status nach Fehler:", gitStatus);
-        
+
         // Prüfe Remote URL nach Fehler
-        const remoteUrlAfterError = await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote get-url origin`, "Post-Error Remote Check", true);
+        const remoteUrlAfterError = await this.execPromiseWithDebug(
+          `cd "${this.gitBackupPath}" && git remote get-url origin`,
+          "Post-Error Remote Check",
+          true
+        );
         console.log("🔗 [GIT PUSH] Remote URL nach Fehler validiert");
-        
       } catch (diagError) {
-        console.error("❌ [GIT PUSH] Diagnose fehlgeschlagen:", diagError.message);
+        console.error(
+          "❌ [GIT PUSH] Diagnose fehlgeschlagen:",
+          diagError.message
+        );
       }
-      
+
       throw error;
     }
   }
@@ -869,62 +1146,88 @@ class DatabaseBackupTool {
   // Enhanced Git Test Methode
   async testGitBackupConnection() {
     console.log("🧪 [GIT TEST] Starte Git Backup Verbindungstest...");
-    
+
     if (!this.config.gitBackup?.enabled) {
       throw new Error("Git Backup ist nicht aktiviert");
     }
-    
+
     if (!this.config.gitBackup?.repository) {
       throw new Error("Git Repository URL ist nicht konfiguriert");
     }
-    
+
     if (!this.config.gitBackup?.username || !this.config.gitBackup?.token) {
       throw new Error("Git Username oder Token fehlt");
     }
-    
+
     // Repository URL validieren
     try {
       new URL(this.config.gitBackup.repository);
     } catch (error) {
       throw new Error("Git Repository URL ist ungültig");
     }
-    
+
     console.log("✅ [GIT TEST] Konfiguration validiert");
-    
+
     // Debug: Git Konfiguration vor Test
     this.debugGitConfiguration();
-    
+
     try {
       // Stelle sicher, dass Git Repository initialisiert ist
       await this.initializeGitBackup();
-      
+
       // Test-Datei erstellen
       const testFilename = `git_test_${Date.now()}.txt`;
-      const testContent = `Git Backup Verbindungstest\nErstellt am: ${new Date().toLocaleString('de-DE')}\nTest ID: ${Math.random().toString(36).substr(2, 9)}\n`;
+      const testContent = `Git Backup Verbindungstest\nErstellt am: ${new Date().toLocaleString(
+        "de-DE"
+      )}\nTest ID: ${Math.random().toString(36).substr(2, 9)}\n`;
       const testFilePath = path.join(this.gitBackupPath, testFilename);
-      
+
       console.log(`📝 [GIT TEST] Erstelle Test-Datei: ${testFilename}`);
       fs.writeFileSync(testFilePath, testContent);
-      
+
       // Git operations testen
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git add "${testFilename}"`, "Test Git Add");
-      
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git add "${testFilename}"`,
+        "Test Git Add"
+      );
+
       const commitMessage = `Test: Git Backup Verbindungstest ${new Date().toISOString()}`;
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`, "Test Git Commit");
-      
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`,
+        "Test Git Commit"
+      );
+
       const branch = this.config.gitBackup.branch || "main";
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git push origin ${branch}`, "Test Git Push", true, 45000);
-      
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git push origin ${branch}`,
+        "Test Git Push",
+        true,
+        45000
+      );
+
       // Test-Datei wieder entfernen
       console.log("🧹 [GIT TEST] Entferne Test-Datei...");
       fs.unlinkSync(testFilePath);
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git add "${testFilename}"`, "Test Git Add (Delete)");
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git commit -m "Remove test file: ${testFilename}"`, "Test Git Commit (Delete)");
-      await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git push origin ${branch}`, "Test Git Push (Delete)", true, 30000);
-      
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git add "${testFilename}"`,
+        "Test Git Add (Delete)"
+      );
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git commit -m "Remove test file: ${testFilename}"`,
+        "Test Git Commit (Delete)"
+      );
+      await this.execPromiseWithDebug(
+        `cd "${this.gitBackupPath}" && git push origin ${branch}`,
+        "Test Git Push (Delete)",
+        true,
+        30000
+      );
+
       console.log("✅ [GIT TEST] Verbindungstest erfolgreich abgeschlossen");
-      return { success: true, message: "Git Backup Verbindung erfolgreich getestet" };
-      
+      return {
+        success: true,
+        message: "Git Backup Verbindung erfolgreich getestet",
+      };
     } catch (error) {
       console.error("❌ [GIT TEST] Verbindungstest fehlgeschlagen:");
       console.error(`   Fehler: ${error.message}`);
@@ -939,52 +1242,73 @@ class DatabaseBackupTool {
 
     try {
       console.log("🧹 [GIT CLEANUP] Prüfe Git Repository auf alte Backups...");
-      
+
       // Liste aller Backup-Dateien im Git Repository
-      const files = fs.readdirSync(this.gitBackupPath)
-        .filter(file => file.endsWith('.sql') || file.endsWith('.sql.gz'))
-        .map(file => {
+      const files = fs
+        .readdirSync(this.gitBackupPath)
+        .filter((file) => file.endsWith(".sql") || file.endsWith(".sql.gz"))
+        .map((file) => {
           const filePath = path.join(this.gitBackupPath, file);
           const stats = fs.statSync(filePath);
           return {
             filename: file,
             path: filePath,
-            created: stats.birthtime
+            created: stats.birthtime,
           };
         })
         .sort((a, b) => a.created - b.created);
 
       const maxBackups = this.config.backup.maxBackups || 10;
-      console.log(`📊 [GIT CLEANUP] ${files.length} Backup-Dateien gefunden, Maximum: ${maxBackups}`);
-      
+      console.log(
+        `📊 [GIT CLEANUP] ${files.length} Backup-Dateien gefunden, Maximum: ${maxBackups}`
+      );
+
       if (files.length > maxBackups) {
         const filesToDelete = files.slice(0, files.length - maxBackups);
-        
-        console.log(`🗑️ [GIT CLEANUP] Lösche ${filesToDelete.length} alte Backup(s) aus Git Repository...`);
-        
+
+        console.log(
+          `🗑️ [GIT CLEANUP] Lösche ${filesToDelete.length} alte Backup(s) aus Git Repository...`
+        );
+
         for (const fileToDelete of filesToDelete) {
           console.log(`   - Lösche: ${fileToDelete.filename}`);
-          
+
           // Datei löschen
           fs.unlinkSync(fileToDelete.path);
-          
+
           // Git Add für gelöschte Datei
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git add "${fileToDelete.filename}"`, "Git Add (Delete)");
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git add "${fileToDelete.filename}"`,
+            "Git Add (Delete)"
+          );
         }
-        
+
         if (filesToDelete.length > 0) {
-          const commitMessage = `Cleanup: Remove ${filesToDelete.length} old backup(s) (${new Date().toLocaleString('de-DE')})`;
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`, "Git Commit (Cleanup)");
-          
+          const commitMessage = `Cleanup: Remove ${
+            filesToDelete.length
+          } old backup(s) (${new Date().toLocaleString("de-DE")})`;
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git commit -m "${commitMessage}"`,
+            "Git Commit (Cleanup)"
+          );
+
           const branch = this.config.gitBackup.branch || "main";
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git push origin ${branch}`, "Git Push (Cleanup)", true, 30000);
-          
-          console.log(`✅ [GIT CLEANUP] ${filesToDelete.length} alte Backup(s) aus Git Repository entfernt`);
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git push origin ${branch}`,
+            "Git Push (Cleanup)",
+            true,
+            30000
+          );
+
+          console.log(
+            `✅ [GIT CLEANUP] ${filesToDelete.length} alte Backup(s) aus Git Repository entfernt`
+          );
         }
       } else {
-        console.log("✅ [GIT CLEANUP] Git Repository Cleanup nicht erforderlich");
+        console.log(
+          "✅ [GIT CLEANUP] Git Repository Cleanup nicht erforderlich"
+        );
       }
-      
     } catch (error) {
       console.error("❌ [GIT CLEANUP] Fehler beim Git Repository Cleanup:");
       console.error(`   Fehler: ${error.message}`);
@@ -995,54 +1319,67 @@ class DatabaseBackupTool {
   async updateGitBackupConfig(req, res) {
     try {
       const { enabled, repository, username, token, branch } = req.body;
-      
-      console.log("🔧 [CONFIG API] Git Backup Konfiguration wird aktualisiert...");
+
+      console.log(
+        "🔧 [CONFIG API] Git Backup Konfiguration wird aktualisiert..."
+      );
       console.log(`   Enabled: ${enabled}`);
-      console.log(`   Repository: '${repository || 'NOT SET'}'`);
-      console.log(`   Username: '${username || 'NOT SET'}'`);
-      console.log(`   Neuer Token: ${token ? '[EMPFANGEN_' + token.length + '_CHARS]' : 'NICHT_GESENDET'}`);
-      console.log(`   Branch: '${branch || 'main'}'`);
-      
+      console.log(`   Repository: '${repository || "NOT SET"}'`);
+      console.log(`   Username: '${username || "NOT SET"}'`);
+      console.log(
+        `   Neuer Token: ${
+          token ? "[EMPFANGEN_" + token.length + "_CHARS]" : "NICHT_GESENDET"
+        }`
+      );
+      console.log(`   Branch: '${branch || "main"}'`);
+
       // Validierung der Eingaben
       if (enabled) {
         if (!repository) {
-          return res.status(400).json({ 
-            error: "Repository URL ist erforderlich wenn Git Backup aktiviert ist" 
+          return res.status(400).json({
+            error:
+              "Repository URL ist erforderlich wenn Git Backup aktiviert ist",
           });
         }
-        
+
         if (!username) {
-          return res.status(400).json({ 
-            error: "Username ist erforderlich wenn Git Backup aktiviert ist" 
+          return res.status(400).json({
+            error: "Username ist erforderlich wenn Git Backup aktiviert ist",
           });
         }
-        
+
         // Repository URL Format validieren
         try {
           new URL(repository);
         } catch (urlError) {
-          return res.status(400).json({ 
-            error: "Repository URL hat ungültiges Format. Verwende HTTPS URLs wie: https://github.com/username/repo.git" 
+          return res.status(400).json({
+            error:
+              "Repository URL hat ungültiges Format. Verwende HTTPS URLs wie: https://github.com/username/repo.git",
           });
         }
       }
-      
+
       // Token-Behandlung: Neuer Token oder bestehender Token
       let finalToken = "";
-      
+
       if (token && token.trim() !== "") {
         // Neuer Token wurde gesendet
         finalToken = token.trim();
-        console.log(`🔑 [CONFIG API] Neuer Token empfangen (${finalToken.length} Zeichen)`);
-        
+        console.log(
+          `🔑 [CONFIG API] Neuer Token empfangen (${finalToken.length} Zeichen)`
+        );
+
         // Token verschlüsselt speichern
         try {
           this.saveGitToken(finalToken);
-          console.log('✅ [CONFIG API] Neuer Token verschlüsselt gespeichert');
+          console.log("✅ [CONFIG API] Neuer Token verschlüsselt gespeichert");
         } catch (tokenError) {
-          console.error('❌ [CONFIG API] Fehler beim Speichern des Tokens:', tokenError);
-          return res.status(500).json({ 
-            error: "Fehler beim Speichern des Tokens: " + tokenError.message 
+          console.error(
+            "❌ [CONFIG API] Fehler beim Speichern des Tokens:",
+            tokenError
+          );
+          return res.status(500).json({
+            error: "Fehler beim Speichern des Tokens: " + tokenError.message,
           });
         }
       } else {
@@ -1050,59 +1387,79 @@ class DatabaseBackupTool {
         const existingToken = this.loadGitToken();
         if (existingToken) {
           finalToken = existingToken;
-          console.log(`🔑 [CONFIG API] Bestehender Token geladen (${finalToken.length} Zeichen)`);
+          console.log(
+            `🔑 [CONFIG API] Bestehender Token geladen (${finalToken.length} Zeichen)`
+          );
         } else {
-          console.log('⚠️ [CONFIG API] Kein Token verfügbar (weder neu noch gespeichert)');
+          console.log(
+            "⚠️ [CONFIG API] Kein Token verfügbar (weder neu noch gespeichert)"
+          );
         }
       }
-      
+
       // Token-Validierung für aktiviertes Git Backup
       if (enabled && !finalToken) {
-        return res.status(400).json({ 
-          error: "Personal Access Token ist erforderlich wenn Git Backup aktiviert ist. Bitte gib einen Token ein." 
+        return res.status(400).json({
+          error:
+            "Personal Access Token ist erforderlich wenn Git Backup aktiviert ist. Bitte gib einen Token ein.",
         });
       }
-      
-      console.log(`✅ [CONFIG API] Token-Validierung erfolgreich, Final Token: ${finalToken ? '[SET_' + finalToken.length + '_CHARS]' : 'EMPTY'}`);
-      
+
+      console.log(
+        `✅ [CONFIG API] Token-Validierung erfolgreich, Final Token: ${
+          finalToken ? "[SET_" + finalToken.length + "_CHARS]" : "EMPTY"
+        }`
+      );
+
       // Konfiguration im Speicher aktualisieren - MIT Token!
       this.config.gitBackup = {
         enabled: enabled === true,
         repository: repository || "",
         username: username || "",
-        token: finalToken,  // WICHTIG: Token im Speicher behalten!
-        branch: branch || "main"
+        token: finalToken, // WICHTIG: Token im Speicher behalten!
+        branch: branch || "main",
       };
-      
+
       console.log("💾 [CONFIG API] Neue Konfiguration im Speicher:");
       console.log(`   Enabled: ${this.config.gitBackup.enabled}`);
       console.log(`   Repository: ${this.config.gitBackup.repository}`);
       console.log(`   Username: ${this.config.gitBackup.username}`);
-      console.log(`   Token im Speicher: ${this.config.gitBackup.token ? '[GESETZT_' + this.config.gitBackup.token.length + '_CHARS]' : 'LEER'}`);
+      console.log(
+        `   Token im Speicher: ${
+          this.config.gitBackup.token
+            ? "[GESETZT_" + this.config.gitBackup.token.length + "_CHARS]"
+            : "LEER"
+        }`
+      );
       console.log(`   Branch: ${this.config.gitBackup.branch}`);
-      
+
       // config.json speichern (OHNE Token aus Sicherheitsgründen)
       const configToSave = { ...this.config };
       if (configToSave.gitBackup) {
         delete configToSave.gitBackup.token; // Token nicht in config.json
       }
-      
+
       fs.writeFileSync("config.json", JSON.stringify(configToSave, null, 2));
       console.log("✅ [CONFIG API] config.json gespeichert (ohne Token)");
-      
+
       // Git Backup neu initialisieren falls aktiviert und Token vorhanden
       if (enabled && finalToken) {
-        console.log("🔄 [CONFIG API] Initialisiere Git Backup mit neuer Konfiguration...");
-        
+        console.log(
+          "🔄 [CONFIG API] Initialisiere Git Backup mit neuer Konfiguration..."
+        );
+
         try {
           await this.initializeGitBackup();
           console.log("✅ [CONFIG API] Git Backup erfolgreich initialisiert");
         } catch (initError) {
-          console.error("❌ [CONFIG API] Git Backup Initialisierung fehlgeschlagen:", initError);
+          console.error(
+            "❌ [CONFIG API] Git Backup Initialisierung fehlgeschlagen:",
+            initError
+          );
           // Nicht als Fehler zurückgeben, da Konfiguration gespeichert wurde
         }
       }
-      
+
       // Response mit detaillierter Information
       const response = {
         message: "Git Backup Konfiguration erfolgreich gespeichert",
@@ -1112,28 +1469,30 @@ class DatabaseBackupTool {
           provided: !!token,
           saved: !!finalToken,
           encrypted: !!finalToken,
-          length: finalToken ? finalToken.length : 0
+          length: finalToken ? finalToken.length : 0,
         },
         debug: {
           configUpdated: true,
           tokenInMemory: !!this.config.gitBackup.token,
-          secretsFileExists: fs.existsSync(this.secretsFile)
-        }
+          secretsFileExists: fs.existsSync(this.secretsFile),
+        },
       };
-      
+
       if (enabled && finalToken) {
         response.message += " und Git Backup initialisiert";
       } else if (enabled && !finalToken) {
         response.message += " (Git Backup benötigt noch einen Token)";
       }
-      
+
       res.json(response);
-      
     } catch (error) {
-      console.error("❌ [CONFIG API] Fehler beim Speichern der Git Backup Konfiguration:", error);
-      res.status(500).json({ 
+      console.error(
+        "❌ [CONFIG API] Fehler beim Speichern der Git Backup Konfiguration:",
+        error
+      );
+      res.status(500).json({
         error: "Fehler beim Speichern der Konfiguration: " + error.message,
-        details: error.stack
+        details: error.stack,
       });
     }
   }
@@ -1214,11 +1573,14 @@ class DatabaseBackupTool {
         secret: this.config.security.sessionSecret,
         resave: false,
         saveUninitialized: false,
+        rolling: true, // Session bei jeder Anfrage erneuern
         cookie: {
-          secure: false,
-          maxAge: 24 * 60 * 60 * 1000,
+          secure: false, // true nur bei HTTPS
+          httpOnly: false, // Erlaubt JavaScript-Zugriff für Token-Speicherung
+          maxAge: 7 * 24 * 60 * 60 * 1000, // 7 Tage statt 1 Tag
           sameSite: "lax",
         },
+        name: "db-backup-session", // Eindeutiger Session-Name
       })
     );
 
@@ -1331,7 +1693,7 @@ class DatabaseBackupTool {
       );
     }
   }
-  
+
   // Enhanced Backup für geplante Aufgaben ausführen mit Git Push
   async executeScheduledBackup(dbConfig) {
     const safeDatabaseName = (dbConfig.database || "unknown_db").replace(
@@ -1365,7 +1727,10 @@ class DatabaseBackupTool {
           } -p ${dbConfig.port || 5432} -U ${dbConfig.username} -d ${
             dbConfig.database
           } > ${backupPath}`;
-          await this.execPromiseWithDebug(pgCommand, "Scheduled PostgreSQL Backup");
+          await this.execPromiseWithDebug(
+            pgCommand,
+            "Scheduled PostgreSQL Backup"
+          );
           break;
 
         case "mongodb":
@@ -1378,10 +1743,15 @@ class DatabaseBackupTool {
           } --db ${dbConfig.database} --username ${
             dbConfig.username
           } --password ${dbConfig.password} --out ${mongoBackupDir}`;
-          await this.execPromiseWithDebug(mongoCommand, "Scheduled MongoDB Backup");
-          
+          await this.execPromiseWithDebug(
+            mongoCommand,
+            "Scheduled MongoDB Backup"
+          );
+
           // MongoDB Backups sind Verzeichnisse, können nicht direkt zu Git gepusht werden
-          console.log("📁 [SCHEDULED] MongoDB Backup als Verzeichnis erstellt - Git Push nicht verfügbar");
+          console.log(
+            "📁 [SCHEDULED] MongoDB Backup als Verzeichnis erstellt - Git Push nicht verfügbar"
+          );
           this.cleanupOldBackups();
           return;
       }
@@ -1391,31 +1761,44 @@ class DatabaseBackupTool {
       // Komprimierung wenn aktiviert
       if (this.config.backup.compression && dbConfig.type !== "mongodb") {
         console.log("🗜️ [SCHEDULED] Komprimiere Backup...");
-        await this.execPromiseWithDebug(`gzip ${backupPath}`, "Scheduled Backup Compression");
+        await this.execPromiseWithDebug(
+          `gzip ${backupPath}`,
+          "Scheduled Backup Compression"
+        );
         finalBackupPath = `${backupPath}.gz`;
       }
 
-      console.log(`✅ [SCHEDULED] Backup erstellt: ${path.basename(finalBackupPath)}`);
+      console.log(
+        `✅ [SCHEDULED] Backup erstellt: ${path.basename(finalBackupPath)}`
+      );
 
       // Git Push ausführen (nur für Dateien, nicht für MongoDB Verzeichnisse)
       if (dbConfig.type !== "mongodb" && fs.existsSync(finalBackupPath)) {
         try {
           console.log("📤 [SCHEDULED] Starte Git Push...");
-          const gitResult = await this.pushBackupToGit(finalBackupPath, path.basename(finalBackupPath));
+          const gitResult = await this.pushBackupToGit(
+            finalBackupPath,
+            path.basename(finalBackupPath)
+          );
           if (gitResult.success) {
-            console.log(`✅ [SCHEDULED] Git Push erfolgreich (${gitResult.duration}ms)`);
+            console.log(
+              `✅ [SCHEDULED] Git Push erfolgreich (${gitResult.duration}ms)`
+            );
           }
         } catch (gitError) {
-          console.error(`⚠️ [SCHEDULED] Git Push für geplantes Backup fehlgeschlagen: ${gitError.message}`);
+          console.error(
+            `⚠️ [SCHEDULED] Git Push für geplantes Backup fehlgeschlagen: ${gitError.message}`
+          );
           // Geplante Backups sollten nicht fehlschlagen nur wegen Git Push Problemen
         }
       }
 
       // Alte Backups aufräumen
       this.cleanupOldBackups();
-      
     } catch (error) {
-      console.error(`❌ [SCHEDULED] Fehler beim geplanten Backup: ${error.message}`);
+      console.error(
+        `❌ [SCHEDULED] Fehler beim geplanten Backup: ${error.message}`
+      );
       throw error;
     }
   }
@@ -1426,11 +1809,15 @@ class DatabaseBackupTool {
       const execTimeout = setTimeout(() => {
         reject(new Error(`Command timeout after ${timeout}ms: ${command}`));
       }, timeout);
-      
+
       exec(command, (error, stdout, stderr) => {
         clearTimeout(execTimeout);
         if (error) {
-          reject(new Error(`Command failed: ${command}\nError: ${error.message}\nStderr: ${stderr}`));
+          reject(
+            new Error(
+              `Command failed: ${command}\nError: ${error.message}\nStderr: ${stderr}`
+            )
+          );
         } else {
           resolve(stdout);
         }
@@ -1441,16 +1828,14 @@ class DatabaseBackupTool {
   cleanupOldBackups() {
     try {
       const backupDir = this.config.backup.defaultPath;
-      const files = fs
-        .readdirSync(backupDir)
-        .filter(
-          (file) =>
-            (file.endsWith(".sql") ||
+      const files = fs.readdirSync(backupDir).filter(
+        (file) =>
+          (file.endsWith(".sql") ||
             file.endsWith(".sql.gz") ||
             (!file.includes(".") &&
               fs.statSync(path.join(backupDir, file)).isDirectory())) &&
-            file !== "git-backup" // Git-Backup Verzeichnis ausschließen
-        );
+          file !== "git-backup" // Git-Backup Verzeichnis ausschließen
+      );
 
       if (files.length > this.config.backup.maxBackups) {
         const backups = files
@@ -1466,7 +1851,9 @@ class DatabaseBackupTool {
           files.length - this.config.backup.maxBackups
         );
 
-        console.log(`🧹 [CLEANUP] Lösche ${filesToDelete.length} alte lokale Backup(s)...`);
+        console.log(
+          `🧹 [CLEANUP] Lösche ${filesToDelete.length} alte lokale Backup(s)...`
+        );
 
         filesToDelete.forEach((backup) => {
           const stats = fs.statSync(backup.path);
@@ -1485,8 +1872,11 @@ class DatabaseBackupTool {
   setupRoutes() {
     // Auth Middleware
     const authMiddleware = (req, res, next) => {
+      // Token aus verschiedenen Quellen versuchen
       const token =
-        req.headers.authorization?.split(" ")[1] || req.session.token;
+        req.headers.authorization?.split(" ")[1] || // Authorization Header
+        req.session.token || // Session
+        req.cookies["auth-token"]; // Cookie
 
       if (!token) {
         return res.status(401).json({ error: "Kein Token bereitgestellt" });
@@ -1495,8 +1885,18 @@ class DatabaseBackupTool {
       try {
         const decoded = jwt.verify(token, this.config.security.jwtSecret);
         req.user = decoded;
+
+        // Session aktualisieren falls Token gültig ist
+        if (!req.session.token) {
+          req.session.token = token;
+          req.session.user = decoded;
+        }
+
         next();
       } catch (error) {
+        // Token ungültig - Session und Cookie löschen
+        req.session.destroy();
+        res.clearCookie("auth-token");
         return res.status(401).json({ error: "Ungültiger Token" });
       }
     };
@@ -1519,17 +1919,60 @@ class DatabaseBackupTool {
       const token = jwt.sign(
         { username: user.username, role: user.role },
         this.config.security.jwtSecret,
-        { expiresIn: "24h" }
+        { expiresIn: "7d" } // Token 7 Tage gültig
       );
 
+      // Token sowohl in Session als auch als Cookie speichern
       req.session.token = token;
+      req.session.user = { username: user.username, role: user.role };
+
+      // Zusätzlich als HttpOnly Cookie setzen
+      res.cookie("auth-token", token, {
+        httpOnly: false, // Erlaubt JavaScript-Zugriff
+        secure: false, // true nur bei HTTPS
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 Tage
+        sameSite: "lax",
+      });
+
       res.json({ token, username: user.username, role: user.role });
     });
 
     // Logout Route
     this.app.post("/api/logout", (req, res) => {
-      req.session.destroy();
+      // Session zerstören
+      req.session.destroy((err) => {
+        if (err) {
+          console.error("Session destroy error:", err);
+        }
+      });
+
+      // Cookie löschen
+      res.clearCookie("auth-token");
+      res.clearCookie("db-backup-session");
+
       res.json({ message: "Erfolgreich abgemeldet" });
+    });
+
+    this.app.get("/api/session-status", (req, res) => {
+      const token =
+        req.headers.authorization?.split(" ")[1] ||
+        req.session.token ||
+        req.cookies["auth-token"];
+
+      if (!token) {
+        return res.json({ authenticated: false });
+      }
+
+      try {
+        const decoded = jwt.verify(token, this.config.security.jwtSecret);
+        res.json({
+          authenticated: true,
+          user: decoded,
+          token: token,
+        });
+      } catch (error) {
+        res.json({ authenticated: false });
+      }
     });
 
     // Update Route für manuelles Update
@@ -1552,33 +1995,38 @@ class DatabaseBackupTool {
         enabled: this.config.gitBackup?.enabled || false,
         repository: this.config.gitBackup?.repository || "",
         username: this.config.gitBackup?.username || "",
-        hasToken: !!(this.config.gitBackup?.token),
-        branch: this.config.gitBackup?.branch || "main"
+        hasToken: !!this.config.gitBackup?.token,
+        branch: this.config.gitBackup?.branch || "main",
       };
       res.json(config);
     });
 
     // Enhanced Git Backup Config Route (verwendet die neue updateGitBackupConfig Methode)
-    this.app.post("/api/git-backup/config", authMiddleware, async (req, res) => {
-      await this.updateGitBackupConfig(req, res);
-    });
+    this.app.post(
+      "/api/git-backup/config",
+      authMiddleware,
+      async (req, res) => {
+        await this.updateGitBackupConfig(req, res);
+      }
+    );
 
     // Enhanced Git Backup Test Route
     this.app.post("/api/git-backup/test", authMiddleware, async (req, res) => {
       try {
         console.log("🧪 [API] Git Backup Test angefordert");
-        
+
         const result = await this.testGitBackupConnection();
-        
-        res.json({ 
-          message: "✅ Git Backup Test erfolgreich! Repository ist erreichbar und beschreibbar.",
-          details: result
+
+        res.json({
+          message:
+            "✅ Git Backup Test erfolgreich! Repository ist erreichbar und beschreibbar.",
+          details: result,
         });
       } catch (error) {
         console.error("❌ [API] Git Backup Test fehlgeschlagen:", error);
-        res.status(500).json({ 
+        res.status(500).json({
           error: `Git Backup Test fehlgeschlagen: ${error.message}`,
-          troubleshooting: this.generateGitTroubleshootingInfo()
+          troubleshooting: this.generateGitTroubleshootingInfo(),
         });
       }
     });
@@ -1586,212 +2034,296 @@ class DatabaseBackupTool {
     // Git Configuration Debug Route
     this.app.get("/api/git-backup/debug-config", authMiddleware, (req, res) => {
       console.log("🔍 [DEBUG API] Git Konfiguration Debug angefordert");
-      
+
       const debugInfo = {
         timestamp: new Date().toISOString(),
         configFile: {},
         environment: {},
         runtime: {},
-        validation: {}
+        validation: {},
       };
-      
+
       // Config File Werte
       debugInfo.configFile = {
         enabled: this.config.gitBackup?.enabled || false,
-        repository: this.config.gitBackup?.repository || 'NOT SET',
-        username: this.config.gitBackup?.username || 'NOT SET',
-        hasToken: !!(this.config.gitBackup?.token),
-        tokenLength: this.config.gitBackup?.token ? this.config.gitBackup.token.length : 0,
-        branch: this.config.gitBackup?.branch || 'NOT SET'
+        repository: this.config.gitBackup?.repository || "NOT SET",
+        username: this.config.gitBackup?.username || "NOT SET",
+        hasToken: !!this.config.gitBackup?.token,
+        tokenLength: this.config.gitBackup?.token
+          ? this.config.gitBackup.token.length
+          : 0,
+        branch: this.config.gitBackup?.branch || "NOT SET",
       };
-      
+
       // Environment Variables
       debugInfo.environment = {
-        GIT_BACKUP_ENABLED: process.env.GIT_BACKUP_ENABLED || 'NOT SET',
-        GIT_BACKUP_REPOSITORY: process.env.GIT_BACKUP_REPOSITORY || 'NOT SET',
-        GIT_BACKUP_USERNAME: process.env.GIT_BACKUP_USERNAME || 'NOT SET',
-        hasGIT_BACKUP_TOKEN: !!(process.env.GIT_BACKUP_TOKEN),
-        GIT_BACKUP_TOKEN_LENGTH: process.env.GIT_BACKUP_TOKEN ? process.env.GIT_BACKUP_TOKEN.length : 0,
-        GIT_BACKUP_BRANCH: process.env.GIT_BACKUP_BRANCH || 'NOT SET'
+        GIT_BACKUP_ENABLED: process.env.GIT_BACKUP_ENABLED || "NOT SET",
+        GIT_BACKUP_REPOSITORY: process.env.GIT_BACKUP_REPOSITORY || "NOT SET",
+        GIT_BACKUP_USERNAME: process.env.GIT_BACKUP_USERNAME || "NOT SET",
+        hasGIT_BACKUP_TOKEN: !!process.env.GIT_BACKUP_TOKEN,
+        GIT_BACKUP_TOKEN_LENGTH: process.env.GIT_BACKUP_TOKEN
+          ? process.env.GIT_BACKUP_TOKEN.length
+          : 0,
+        GIT_BACKUP_BRANCH: process.env.GIT_BACKUP_BRANCH || "NOT SET",
       };
-      
+
       // Runtime Status
       debugInfo.runtime = {
         gitBackupPath: this.gitBackupPath,
         gitBackupPathExists: fs.existsSync(this.gitBackupPath),
-        gitRepoExists: fs.existsSync(path.join(this.gitBackupPath, '.git')),
-        configJsonExists: fs.existsSync('config.json'),
+        gitRepoExists: fs.existsSync(path.join(this.gitBackupPath, ".git")),
+        configJsonExists: fs.existsSync("config.json"),
         nodeVersion: process.version,
-        platform: process.platform
+        platform: process.platform,
       };
-      
+
       // Validation
       const validation = [];
       if (!debugInfo.configFile.enabled) {
-        validation.push({ level: 'INFO', message: 'Git Backup ist deaktiviert' });
+        validation.push({
+          level: "INFO",
+          message: "Git Backup ist deaktiviert",
+        });
       } else {
-        if (!debugInfo.configFile.repository || debugInfo.configFile.repository === 'NOT SET') {
-          validation.push({ level: 'ERROR', message: 'Repository URL ist nicht gesetzt' });
+        if (
+          !debugInfo.configFile.repository ||
+          debugInfo.configFile.repository === "NOT SET"
+        ) {
+          validation.push({
+            level: "ERROR",
+            message: "Repository URL ist nicht gesetzt",
+          });
         } else {
           try {
             new URL(debugInfo.configFile.repository);
-            validation.push({ level: 'OK', message: 'Repository URL Format ist gültig' });
+            validation.push({
+              level: "OK",
+              message: "Repository URL Format ist gültig",
+            });
           } catch (e) {
-            validation.push({ level: 'ERROR', message: 'Repository URL Format ist ungültig' });
+            validation.push({
+              level: "ERROR",
+              message: "Repository URL Format ist ungültig",
+            });
           }
         }
-        
-        if (!debugInfo.configFile.username || debugInfo.configFile.username === 'NOT SET') {
-          validation.push({ level: 'ERROR', message: 'Username ist nicht gesetzt' });
+
+        if (
+          !debugInfo.configFile.username ||
+          debugInfo.configFile.username === "NOT SET"
+        ) {
+          validation.push({
+            level: "ERROR",
+            message: "Username ist nicht gesetzt",
+          });
         } else {
-          validation.push({ level: 'OK', message: 'Username ist gesetzt' });
+          validation.push({ level: "OK", message: "Username ist gesetzt" });
         }
-        
+
         if (!debugInfo.configFile.hasToken) {
-          validation.push({ level: 'ERROR', message: 'Personal Access Token ist nicht gesetzt' });
+          validation.push({
+            level: "ERROR",
+            message: "Personal Access Token ist nicht gesetzt",
+          });
         } else {
-          validation.push({ level: 'OK', message: `Personal Access Token ist gesetzt (${debugInfo.configFile.tokenLength} Zeichen)` });
+          validation.push({
+            level: "OK",
+            message: `Personal Access Token ist gesetzt (${debugInfo.configFile.tokenLength} Zeichen)`,
+          });
         }
-        
+
         if (!debugInfo.runtime.gitBackupPathExists) {
-          validation.push({ level: 'WARNING', message: 'Git Backup Verzeichnis existiert nicht' });
+          validation.push({
+            level: "WARNING",
+            message: "Git Backup Verzeichnis existiert nicht",
+          });
         } else if (!debugInfo.runtime.gitRepoExists) {
-          validation.push({ level: 'WARNING', message: 'Git Repository ist nicht initialisiert' });
+          validation.push({
+            level: "WARNING",
+            message: "Git Repository ist nicht initialisiert",
+          });
         } else {
-          validation.push({ level: 'OK', message: 'Git Repository ist initialisiert' });
+          validation.push({
+            level: "OK",
+            message: "Git Repository ist initialisiert",
+          });
         }
       }
-      
+
       debugInfo.validation = validation;
-      
+
       res.json(debugInfo);
     });
 
     // Git Remote URL Test Route (ohne echten Push)
-    this.app.post("/api/git-backup/test-url", authMiddleware, async (req, res) => {
-      try {
-        console.log("🧪 [URL TEST] Git Remote URL Test angefordert");
-        
-        if (!this.config.gitBackup?.enabled) {
-          return res.status(400).json({ error: "Git Backup ist nicht aktiviert" });
-        }
-        
-        // Debug Konfiguration ausgeben
-        this.debugGitConfiguration();
-        
-        // URL erstellen und validieren
-        const remoteUrl = this.buildGitRemoteUrl();
-        
-        if (!remoteUrl) {
-          return res.status(400).json({ 
-            error: "Konnte authentifizierte Git Remote URL nicht erstellen",
-            troubleshooting: this.generateGitTroubleshootingInfo()
+    this.app.post(
+      "/api/git-backup/test-url",
+      authMiddleware,
+      async (req, res) => {
+        try {
+          console.log("🧪 [URL TEST] Git Remote URL Test angefordert");
+
+          if (!this.config.gitBackup?.enabled) {
+            return res
+              .status(400)
+              .json({ error: "Git Backup ist nicht aktiviert" });
+          }
+
+          // Debug Konfiguration ausgeben
+          this.debugGitConfiguration();
+
+          // URL erstellen und validieren
+          const remoteUrl = this.buildGitRemoteUrl();
+
+          if (!remoteUrl) {
+            return res.status(400).json({
+              error: "Konnte authentifizierte Git Remote URL nicht erstellen",
+              troubleshooting: this.generateGitTroubleshootingInfo(),
+            });
+          }
+
+          // Git Repository initialisieren falls nötig
+          if (!fs.existsSync(this.gitBackupPath)) {
+            fs.mkdirSync(this.gitBackupPath, { recursive: true });
+          }
+
+          if (!fs.existsSync(path.join(this.gitBackupPath, ".git"))) {
+            await this.execPromiseWithDebug(
+              `cd "${this.gitBackupPath}" && git init`,
+              "Init for URL Test"
+            );
+          }
+
+          // Remote URL setzen
+          try {
+            await this.execPromiseWithDebug(
+              `cd "${this.gitBackupPath}" && git remote remove origin`,
+              "Remove existing remote",
+              false,
+              5000
+            );
+          } catch (e) {
+            // Ignoriere Fehler wenn kein Remote existiert
+          }
+
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git remote add origin "${remoteUrl}"`,
+            "Add test remote",
+            true
+          );
+
+          // Repository-Zugriff testen (ohne Push)
+          await this.execPromiseWithDebug(
+            `cd "${this.gitBackupPath}" && git ls-remote origin`,
+            "Test remote access",
+            true,
+            30000
+          );
+
+          res.json({
+            message:
+              "✅ Git Remote URL Test erfolgreich! Repository ist erreichbar.",
+            status: "accessible",
+            notes: [
+              "Repository-Zugriff funktioniert",
+              "Authentifizierung ist korrekt",
+              "Bereit für echte Push-Operationen",
+            ],
+          });
+        } catch (error) {
+          console.error(
+            "❌ [URL TEST] Git Remote URL Test fehlgeschlagen:",
+            error
+          );
+
+          let errorCategory = "unknown";
+          let suggestions = [];
+
+          if (
+            error.message.includes("Authentication failed") ||
+            error.message.includes("Username for")
+          ) {
+            errorCategory = "authentication";
+            suggestions = [
+              "Prüfe ob der Personal Access Token korrekt ist",
+              "Stelle sicher, dass der Token 'repo' Berechtigung hat",
+              "Überprüfe ob der Username korrekt ist",
+            ];
+          } else if (
+            error.message.includes("Repository not found") ||
+            error.message.includes("not found")
+          ) {
+            errorCategory = "repository";
+            suggestions = [
+              "Stelle sicher, dass das Repository existiert",
+              "Prüfe ob die Repository URL korrekt ist",
+              "Überprüfe die Repository-Berechtigungen",
+            ];
+          } else if (error.message.includes("timeout")) {
+            errorCategory = "network";
+            suggestions = [
+              "Prüfe die Internetverbindung",
+              "Git Server könnte langsam oder überlastet sein",
+              "Versuche es später erneut",
+            ];
+          }
+
+          res.status(500).json({
+            error: `Git Remote URL Test fehlgeschlagen: ${error.message}`,
+            category: errorCategory,
+            suggestions: suggestions,
+            troubleshooting: this.generateGitTroubleshootingInfo(),
           });
         }
-        
-        // Git Repository initialisieren falls nötig
-        if (!fs.existsSync(this.gitBackupPath)) {
-          fs.mkdirSync(this.gitBackupPath, { recursive: true });
-        }
-        
-        if (!fs.existsSync(path.join(this.gitBackupPath, ".git"))) {
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git init`, "Init for URL Test");
-        }
-        
-        // Remote URL setzen
-        try {
-          await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote remove origin`, "Remove existing remote", false, 5000);
-        } catch (e) {
-          // Ignoriere Fehler wenn kein Remote existiert
-        }
-        
-        await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git remote add origin "${remoteUrl}"`, "Add test remote", true);
-        
-        // Repository-Zugriff testen (ohne Push)
-        await this.execPromiseWithDebug(`cd "${this.gitBackupPath}" && git ls-remote origin`, "Test remote access", true, 30000);
-        
-        res.json({ 
-          message: "✅ Git Remote URL Test erfolgreich! Repository ist erreichbar.",
-          status: "accessible",
-          notes: [
-            "Repository-Zugriff funktioniert",
-            "Authentifizierung ist korrekt",
-            "Bereit für echte Push-Operationen"
-          ]
-        });
-        
-      } catch (error) {
-        console.error("❌ [URL TEST] Git Remote URL Test fehlgeschlagen:", error);
-        
-        let errorCategory = "unknown";
-        let suggestions = [];
-        
-        if (error.message.includes("Authentication failed") || error.message.includes("Username for")) {
-          errorCategory = "authentication";
-          suggestions = [
-            "Prüfe ob der Personal Access Token korrekt ist",
-            "Stelle sicher, dass der Token 'repo' Berechtigung hat",
-            "Überprüfe ob der Username korrekt ist"
-          ];
-        } else if (error.message.includes("Repository not found") || error.message.includes("not found")) {
-          errorCategory = "repository";
-          suggestions = [
-            "Stelle sicher, dass das Repository existiert",
-            "Prüfe ob die Repository URL korrekt ist",
-            "Überprüfe die Repository-Berechtigungen"
-          ];
-        } else if (error.message.includes("timeout")) {
-          errorCategory = "network";
-          suggestions = [
-            "Prüfe die Internetverbindung",
-            "Git Server könnte langsam oder überlastet sein",
-            "Versuche es später erneut"
-          ];
-        }
-        
-        res.status(500).json({ 
-          error: `Git Remote URL Test fehlgeschlagen: ${error.message}`,
-          category: errorCategory,
-          suggestions: suggestions,
-          troubleshooting: this.generateGitTroubleshootingInfo()
-        });
       }
-    });
+    );
 
     // Git Configuration Reload Route
-    this.app.post("/api/git-backup/reload-config", authMiddleware, async (req, res) => {
-      try {
-        console.log("🔄 [RELOAD] Git Backup Konfiguration wird neu geladen...");
-        
-        // Konfiguration neu laden
-        const originalConfig = this.config.gitBackup;
-        this.config = this.loadConfig();
-        
-        console.log("📊 [RELOAD] Konfiguration Vergleich:");
-        console.log(`   Vorher - Enabled: ${originalConfig?.enabled || false}`);
-        console.log(`   Nachher - Enabled: ${this.config.gitBackup?.enabled || false}`);
-        
-        // Git Backup neu initialisieren wenn aktiviert
-        if (this.config.gitBackup?.enabled) {
-          await this.initializeGitBackup();
-        }
-        
-        res.json({ 
-          message: "Git Backup Konfiguration erfolgreich neu geladen",
-          reloaded: true,
-          status: {
-            before: originalConfig,
-            after: this.config.gitBackup
+    this.app.post(
+      "/api/git-backup/reload-config",
+      authMiddleware,
+      async (req, res) => {
+        try {
+          console.log(
+            "🔄 [RELOAD] Git Backup Konfiguration wird neu geladen..."
+          );
+
+          // Konfiguration neu laden
+          const originalConfig = this.config.gitBackup;
+          this.config = this.loadConfig();
+
+          console.log("📊 [RELOAD] Konfiguration Vergleich:");
+          console.log(
+            `   Vorher - Enabled: ${originalConfig?.enabled || false}`
+          );
+          console.log(
+            `   Nachher - Enabled: ${this.config.gitBackup?.enabled || false}`
+          );
+
+          // Git Backup neu initialisieren wenn aktiviert
+          if (this.config.gitBackup?.enabled) {
+            await this.initializeGitBackup();
           }
-        });
-        
-      } catch (error) {
-        console.error("❌ [RELOAD] Fehler beim Neu-Laden der Git Konfiguration:", error);
-        res.status(500).json({ 
-          error: "Fehler beim Neu-Laden: " + error.message 
-        });
+
+          res.json({
+            message: "Git Backup Konfiguration erfolgreich neu geladen",
+            reloaded: true,
+            status: {
+              before: originalConfig,
+              after: this.config.gitBackup,
+            },
+          });
+        } catch (error) {
+          console.error(
+            "❌ [RELOAD] Fehler beim Neu-Laden der Git Konfiguration:",
+            error
+          );
+          res.status(500).json({
+            error: "Fehler beim Neu-Laden: " + error.message,
+          });
+        }
       }
-    });
+    );
 
     // Git Backup Debug Info Route
     this.app.get("/api/git-backup/debug", authMiddleware, (req, res) => {
@@ -1825,8 +2357,10 @@ class DatabaseBackupTool {
             gitBackup: {
               enabled: this.config.gitBackup?.enabled || false,
               repository: this.config.gitBackup?.repository || "",
-              hasCredentials: !!(this.config.gitBackup?.username && this.config.gitBackup?.token)
-            }
+              hasCredentials: !!(
+                this.config.gitBackup?.username && this.config.gitBackup?.token
+              ),
+            },
           });
         });
       });
@@ -1844,7 +2378,9 @@ class DatabaseBackupTool {
         options = {},
       } = req.body;
 
-      console.log(`📤 [API] Backup angefordert für ${type} Database: ${database}`);
+      console.log(
+        `📤 [API] Backup angefordert für ${type} Database: ${database}`
+      );
 
       if (!type || !host || !database || !username || !password) {
         return res.status(400).json({
@@ -1862,7 +2398,7 @@ class DatabaseBackupTool {
 
       try {
         console.log(`💾 [BACKUP] Erstelle ${type} Backup: ${filename}`);
-        
+
         switch (type) {
           case "mysql":
             await mysqldump({
@@ -1882,25 +2418,33 @@ class DatabaseBackupTool {
             if (this.config.backup.compression) {
               console.log("🗜️ [BACKUP] Komprimiere Backup...");
               const compressedPath = backupPath + ".gz";
-              await this.execPromiseWithDebug(`gzip ${backupPath}`, "Backup Compression");
+              await this.execPromiseWithDebug(
+                `gzip ${backupPath}`,
+                "Backup Compression"
+              );
               finalPath = compressedPath;
             }
 
-            console.log(`✅ [BACKUP] Backup erstellt: ${path.basename(finalPath)}`);
+            console.log(
+              `✅ [BACKUP] Backup erstellt: ${path.basename(finalPath)}`
+            );
 
             // Git Push versuchen mit detailliertem Logging
             let gitPushResult = { success: false, reason: "not_attempted" };
             if (this.config.gitBackup?.enabled) {
               try {
                 console.log("📤 [BACKUP] Starte Git Push...");
-                gitPushResult = await this.pushBackupToGit(finalPath, path.basename(finalPath));
+                gitPushResult = await this.pushBackupToGit(
+                  finalPath,
+                  path.basename(finalPath)
+                );
                 console.log(`✅ [BACKUP] Git Push Result:`, gitPushResult);
               } catch (gitError) {
                 console.error("❌ [BACKUP] Git Push fehlgeschlagen:", gitError);
-                gitPushResult = { 
-                  success: false, 
+                gitPushResult = {
+                  success: false,
                   error: gitError.message,
-                  troubleshooting: this.generateGitTroubleshootingInfo()
+                  troubleshooting: this.generateGitTroubleshootingInfo(),
                 };
               }
             }
@@ -1913,7 +2457,7 @@ class DatabaseBackupTool {
               message: "Backup erfolgreich erstellt",
               filename: path.basename(finalPath),
               path: finalPath,
-              gitPushed: gitPushResult.success
+              gitPushed: gitPushResult.success,
             };
 
             if (gitPushResult.success) {
@@ -1946,8 +2490,8 @@ class DatabaseBackupTool {
               if (error) {
                 console.error("❌ [BACKUP] PostgreSQL Backup Fehler:", error);
                 console.error("stderr:", stderr);
-                return res.status(500).json({ 
-                  error: "Backup fehlgeschlagen: " + error.message 
+                return res.status(500).json({
+                  error: "Backup fehlgeschlagen: " + error.message,
                 });
               }
 
@@ -1955,10 +2499,16 @@ class DatabaseBackupTool {
 
               if (this.config.backup.compression) {
                 try {
-                  await this.execPromiseWithDebug(`gzip ${backupPath}`, "PostgreSQL Backup Compression");
+                  await this.execPromiseWithDebug(
+                    `gzip ${backupPath}`,
+                    "PostgreSQL Backup Compression"
+                  );
                   finalPath = backupPath + ".gz";
                 } catch (compressError) {
-                  console.error("❌ [BACKUP] Komprimierung fehlgeschlagen:", compressError);
+                  console.error(
+                    "❌ [BACKUP] Komprimierung fehlgeschlagen:",
+                    compressError
+                  );
                 }
               }
 
@@ -1966,13 +2516,19 @@ class DatabaseBackupTool {
               let gitPushResult = { success: false, reason: "not_attempted" };
               if (this.config.gitBackup?.enabled) {
                 try {
-                  gitPushResult = await this.pushBackupToGit(finalPath, path.basename(finalPath));
+                  gitPushResult = await this.pushBackupToGit(
+                    finalPath,
+                    path.basename(finalPath)
+                  );
                 } catch (gitError) {
-                  console.error("❌ [BACKUP] PostgreSQL Git Push fehlgeschlagen:", gitError);
-                  gitPushResult = { 
-                    success: false, 
+                  console.error(
+                    "❌ [BACKUP] PostgreSQL Git Push fehlgeschlagen:",
+                    gitError
+                  );
+                  gitPushResult = {
+                    success: false,
                     error: gitError.message,
-                    troubleshooting: this.generateGitTroubleshootingInfo()
+                    troubleshooting: this.generateGitTroubleshootingInfo(),
                   };
                 }
               }
@@ -1983,7 +2539,7 @@ class DatabaseBackupTool {
                 message: "Backup erfolgreich erstellt",
                 filename: path.basename(finalPath),
                 path: finalPath,
-                gitPushed: gitPushResult.success
+                gitPushed: gitPushResult.success,
               };
 
               if (gitPushResult.success) {
@@ -2021,8 +2577,8 @@ class DatabaseBackupTool {
               if (error) {
                 console.error("❌ [BACKUP] MongoDB Backup Fehler:", error);
                 console.error("stderr:", stderr);
-                return res.status(500).json({ 
-                  error: "Backup fehlgeschlagen: " + error.message 
+                return res.status(500).json({
+                  error: "Backup fehlgeschlagen: " + error.message,
                 });
               }
 
@@ -2030,24 +2586,25 @@ class DatabaseBackupTool {
               this.cleanupOldBackups();
 
               res.json({
-                message: "Backup erfolgreich erstellt (MongoDB Verzeichnis - Git Push nicht verfügbar)",
+                message:
+                  "Backup erfolgreich erstellt (MongoDB Verzeichnis - Git Push nicht verfügbar)",
                 filename: path.basename(mongoBackupDir),
                 path: mongoBackupDir,
                 gitPushed: false,
-                note: "MongoDB Backups werden als Verzeichnisse gespeichert und können derzeit nicht automatisch zu Git gepusht werden."
+                note: "MongoDB Backups werden als Verzeichnisse gespeichert und können derzeit nicht automatisch zu Git gepusht werden.",
               });
             });
             break;
 
           default:
-            return res.status(400).json({ 
-              error: "Nicht unterstützter Datenbanktyp" 
+            return res.status(400).json({
+              error: "Nicht unterstützter Datenbanktyp",
             });
         }
       } catch (error) {
         console.error("❌ [BACKUP] Fehler beim Erstellen des Backups:", error);
-        res.status(500).json({ 
-          error: "Fehler beim Erstellen des Backups: " + error.message 
+        res.status(500).json({
+          error: "Fehler beim Erstellen des Backups: " + error.message,
         });
       }
     });
@@ -2094,20 +2651,24 @@ class DatabaseBackupTool {
     this.app.get("/api/git-backup/token-status", authMiddleware, (req, res) => {
       try {
         const tokenStatus = this.getTokenStatus();
-        
+
         const response = {
           timestamp: new Date().toISOString(),
           tokenStatus: tokenStatus,
           memoryToken: {
             hasToken: !!this.config.gitBackup?.token,
-            tokenLength: this.config.gitBackup?.token ? this.config.gitBackup.token.length : 0
+            tokenLength: this.config.gitBackup?.token
+              ? this.config.gitBackup.token.length
+              : 0,
           },
           environmentToken: {
             hasEnvToken: !!process.env.GIT_BACKUP_TOKEN,
-            envTokenLength: process.env.GIT_BACKUP_TOKEN ? process.env.GIT_BACKUP_TOKEN.length : 0
-          }
+            envTokenLength: process.env.GIT_BACKUP_TOKEN
+              ? process.env.GIT_BACKUP_TOKEN.length
+              : 0,
+          },
         };
-        
+
         res.json(response);
       } catch (error) {
         res.status(500).json({ error: error.message });
@@ -2117,25 +2678,25 @@ class DatabaseBackupTool {
     // NEU: Token löschen Route
     this.app.delete("/api/git-backup/token", authMiddleware, (req, res) => {
       try {
-        console.log('🗑️ [TOKEN DELETE] Lösche gespeicherten Git Token...');
-        
+        console.log("🗑️ [TOKEN DELETE] Lösche gespeicherten Git Token...");
+
         // Token aus Speicher entfernen
         if (this.config.gitBackup) {
           this.config.gitBackup.token = "";
         }
-        
+
         // Verschlüsselte Token-Datei löschen
         if (fs.existsSync(this.secretsFile)) {
           fs.unlinkSync(this.secretsFile);
-          console.log('✅ [TOKEN DELETE] Verschlüsselte Token-Datei gelöscht');
+          console.log("✅ [TOKEN DELETE] Verschlüsselte Token-Datei gelöscht");
         }
-        
-        res.json({ 
+
+        res.json({
           message: "Git Token erfolgreich gelöscht",
-          deleted: true
+          deleted: true,
         });
       } catch (error) {
-        console.error('❌ [TOKEN DELETE] Fehler:', error);
+        console.error("❌ [TOKEN DELETE] Fehler:", error);
         res.status(500).json({ error: error.message });
       }
     });
@@ -2143,16 +2704,14 @@ class DatabaseBackupTool {
   async getBackups(req, res) {
     try {
       const backupDir = this.config.backup.defaultPath;
-      const files = fs
-        .readdirSync(backupDir)
-        .filter(
-          (file) =>
-            file.endsWith(".sql") ||
-            file.endsWith(".sql.gz") ||
-            (!file.includes(".") &&
-              fs.statSync(path.join(backupDir, file)).isDirectory() &&
-              file !== "git-backup") // Git-Backup Verzeichnis ausschließen
-        );
+      const files = fs.readdirSync(backupDir).filter(
+        (file) =>
+          file.endsWith(".sql") ||
+          file.endsWith(".sql.gz") ||
+          (!file.includes(".") &&
+            fs.statSync(path.join(backupDir, file)).isDirectory() &&
+            file !== "git-backup") // Git-Backup Verzeichnis ausschließen
+      );
 
       const backups = files
         .map((file) => {
@@ -2200,7 +2759,10 @@ class DatabaseBackupTool {
         res.status(404).json({ error: "Backup nicht gefunden" });
       }
     } catch (error) {
-      console.error(`❌ [API] Fehler beim Löschen des Backups ${filename}:`, error);
+      console.error(
+        `❌ [API] Fehler beim Löschen des Backups ${filename}:`,
+        error
+      );
       res
         .status(500)
         .json({ error: "Fehler beim Löschen des Backups: " + error.message });
@@ -2217,13 +2779,13 @@ class DatabaseBackupTool {
       if (fs.existsSync(backupPath)) {
         const stats = fs.statSync(backupPath);
         if (stats.isDirectory()) {
-          console.log(`❌ [API] Verzeichnis-Download nicht unterstützt: ${filename}`);
-          return res
-            .status(400)
-            .json({
-              error:
-                "Download von Verzeichnissen nicht unterstützt. Bitte verwende die Kommandozeile.",
-            });
+          console.log(
+            `❌ [API] Verzeichnis-Download nicht unterstützt: ${filename}`
+          );
+          return res.status(400).json({
+            error:
+              "Download von Verzeichnissen nicht unterstützt. Bitte verwende die Kommandozeile.",
+          });
         }
         console.log(`✅ [API] Backup-Download gestartet: ${filename}`);
         res.download(backupPath, filename);
@@ -2245,12 +2807,10 @@ class DatabaseBackupTool {
     console.log(`   Database: ${dbConfig.type} - ${dbConfig.database}`);
 
     if (!name || !cronExpression || !dbConfig || !dbConfig.database) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Name, Cron-Expression und gültige Datenbank-Konfiguration erforderlich",
-        });
+      return res.status(400).json({
+        error:
+          "Name, Cron-Expression und gültige Datenbank-Konfiguration erforderlich",
+      });
     }
 
     try {
@@ -2291,12 +2851,13 @@ class DatabaseBackupTool {
         jobId,
       });
     } catch (error) {
-      console.error(`❌ [API] Fehler beim Erstellen des Zeitplans ${name}:`, error);
-      res
-        .status(500)
-        .json({
-          error: "Fehler beim Erstellen des Zeitplans: " + error.message,
-        });
+      console.error(
+        `❌ [API] Fehler beim Erstellen des Zeitplans ${name}:`,
+        error
+      );
+      res.status(500).json({
+        error: "Fehler beim Erstellen des Zeitplans: " + error.message,
+      });
     }
   }
 
@@ -2310,11 +2871,15 @@ class DatabaseBackupTool {
         created: job.created,
       }));
 
-      console.log(`📋 [API] Zeitplan-Liste geladen: ${schedules.length} Zeitpläne`);
+      console.log(
+        `📋 [API] Zeitplan-Liste geladen: ${schedules.length} Zeitpläne`
+      );
       res.json(schedules);
     } catch (error) {
       console.error("❌ [API] Fehler beim Laden der Zeitpläne:", error);
-      res.status(500).json({ error: "Fehler beim Laden der Zeitpläne: " + error.message });
+      res
+        .status(500)
+        .json({ error: "Fehler beim Laden der Zeitpläne: " + error.message });
     }
   }
 
@@ -2327,7 +2892,7 @@ class DatabaseBackupTool {
       if (this.backupJobs.has(id)) {
         const job = this.backupJobs.get(id);
         const jobName = job.name;
-        
+
         job.job.stop();
         job.job.destroy();
         this.backupJobs.delete(id);
@@ -2343,7 +2908,9 @@ class DatabaseBackupTool {
       }
     } catch (error) {
       console.error(`❌ [API] Fehler beim Löschen des Zeitplans ${id}:`, error);
-      res.status(500).json({ error: "Fehler beim Löschen des Zeitplans: " + error.message });
+      res
+        .status(500)
+        .json({ error: "Fehler beim Löschen des Zeitplans: " + error.message });
     }
   }
 
@@ -2372,38 +2939,67 @@ class DatabaseBackupTool {
       console.log("📦 Offizielles Repository: " + this.updateRepository);
       console.log("🔗 Branch: " + this.updateBranch);
       console.log("");
-      
+
       // Enhanced Git Backup Status mit detaillierter Diagnose
-      console.log("📤 =================== GIT BACKUP STATUS ===================");
+      console.log(
+        "📤 =================== GIT BACKUP STATUS ==================="
+      );
       if (this.config.gitBackup?.enabled) {
         console.log("📤 Git Backup: ✅ AKTIVIERT");
-        console.log("📦 Git Repository: " + (this.config.gitBackup.repository || "❌ Nicht konfiguriert"));
-        console.log("👤 Git Username: " + (this.config.gitBackup.username || "❌ Nicht gesetzt"));
-        console.log("🔑 Git Token: " + (this.config.gitBackup.token ? "✅ Gesetzt (" + this.config.gitBackup.token.length + " Zeichen)" : "❌ Nicht gesetzt"));
-        console.log("🌿 Git Branch: " + (this.config.gitBackup.branch || "main"));
+        console.log(
+          "📦 Git Repository: " +
+            (this.config.gitBackup.repository || "❌ Nicht konfiguriert")
+        );
+        console.log(
+          "👤 Git Username: " +
+            (this.config.gitBackup.username || "❌ Nicht gesetzt")
+        );
+        console.log(
+          "🔑 Git Token: " +
+            (this.config.gitBackup.token
+              ? "✅ Gesetzt (" +
+                this.config.gitBackup.token.length +
+                " Zeichen)"
+              : "❌ Nicht gesetzt")
+        );
+        console.log(
+          "🌿 Git Branch: " + (this.config.gitBackup.branch || "main")
+        );
         console.log("📁 Git Backup Pfad: " + this.gitBackupPath);
-        
+
         // Git Repository Status prüfen
         if (fs.existsSync(this.gitBackupPath)) {
           if (fs.existsSync(path.join(this.gitBackupPath, ".git"))) {
             console.log("🔧 Git Repository Status: ✅ Initialisiert");
-            
+
             // Prüfe Remote-Konfiguration
             try {
-              const { execSync } = require('child_process');
-              const remoteUrl = execSync(`cd "${this.gitBackupPath}" && git remote get-url origin`, { encoding: 'utf8' }).trim();
-              const hasAuth = remoteUrl.includes('@');
-              console.log("🔗 Git Remote Status: " + (hasAuth ? "✅ Mit Authentifizierung konfiguriert" : "⚠️ Ohne Authentifizierung"));
+              const { execSync } = require("child_process");
+              const remoteUrl = execSync(
+                `cd "${this.gitBackupPath}" && git remote get-url origin`,
+                { encoding: "utf8" }
+              ).trim();
+              const hasAuth = remoteUrl.includes("@");
+              console.log(
+                "🔗 Git Remote Status: " +
+                  (hasAuth
+                    ? "✅ Mit Authentifizierung konfiguriert"
+                    : "⚠️ Ohne Authentifizierung")
+              );
             } catch (remoteError) {
               console.log("🔗 Git Remote Status: ❌ Nicht konfiguriert");
             }
           } else {
-            console.log("🔧 Git Repository Status: ⚠️ Verzeichnis existiert, aber nicht als Git Repository");
+            console.log(
+              "🔧 Git Repository Status: ⚠️ Verzeichnis existiert, aber nicht als Git Repository"
+            );
           }
         } else {
-          console.log("🔧 Git Repository Status: ❌ Verzeichnis existiert nicht");
+          console.log(
+            "🔧 Git Repository Status: ❌ Verzeichnis existiert nicht"
+          );
         }
-        
+
         // Git Backup Konfiguration Validierung
         console.log("");
         console.log("🔍 GIT BACKUP VALIDIERUNG:");
@@ -2418,40 +3014,52 @@ class DatabaseBackupTool {
             issues.push("❌ Repository URL Format ist ungültig");
           }
         }
-        
+
         if (!this.config.gitBackup.username) {
           issues.push("❌ Git Username nicht gesetzt");
         } else {
           console.log("✅ Git Username ist gesetzt");
         }
-        
+
         if (!this.config.gitBackup.token) {
           issues.push("❌ Personal Access Token nicht gesetzt");
         } else {
           console.log("✅ Personal Access Token ist gesetzt");
         }
-        
+
         if (issues.length > 0) {
           console.log("");
           console.log("⚠️  GIT BACKUP KONFIGURATIONSPROBLEME:");
-          issues.forEach(issue => console.log("   " + issue));
-          console.log("🔧 Bitte konfiguriere Git Backup über das Web-Interface!");
-          console.log("🧪 Verwende die neuen Debug-APIs für detaillierte Diagnose:");
+          issues.forEach((issue) => console.log("   " + issue));
+          console.log(
+            "🔧 Bitte konfiguriere Git Backup über das Web-Interface!"
+          );
+          console.log(
+            "🧪 Verwende die neuen Debug-APIs für detaillierte Diagnose:"
+          );
           console.log("   GET /api/git-backup/debug-config");
           console.log("   POST /api/git-backup/test-url");
         } else {
           console.log("✅ Git Backup Konfiguration ist vollständig");
-          console.log("💡 Verwende 'Verbindung testen' im Web-Interface zur Validierung");
+          console.log(
+            "💡 Verwende 'Verbindung testen' im Web-Interface zur Validierung"
+          );
         }
       } else {
         console.log("📤 Git Backup: ❌ DEAKTIVIERT");
-        console.log("💡 Aktiviere Git Backup im Web-Interface für automatische Repository-Synchronisation");
+        console.log(
+          "💡 Aktiviere Git Backup im Web-Interface für automatische Repository-Synchronisation"
+        );
       }
-      console.log("============================================================");
+      console.log(
+        "============================================================"
+      );
       console.log("");
-      
+
       // Enhanced Features Liste
-      console.log("🎯 =================== ERWEITERTE FUNKTIONEN ===================");
+      console.log(
+        "🎯 =================== ERWEITERTE FUNKTIONEN ==================="
+      );
       console.log("├── 🔍 Detailliertes Git Push Debugging (60s Timeout)");
       console.log("├── ⏱️ Non-Interactive Git (GIT_TERMINAL_PROMPT=0)");
       console.log("├── 🚫 Authentifizierte Git URLs mit Token-Embedding");
@@ -2461,24 +3069,44 @@ class DatabaseBackupTool {
       console.log("├── 🧪 URL-Test ohne echten Push");
       console.log("├── 🔄 Live-Konfiguration Reload");
       console.log("└── 📤 Modulares Frontend mit Custom-Anpassungen");
-      console.log("================================================================");
+      console.log(
+        "================================================================"
+      );
       console.log("");
-      
+
       // Debug Endpoints Overview
       console.log("🔧 =================== DEBUG ENDPOINTS ===================");
-      console.log("├── GET  /api/git-backup/debug-config   - Vollständige Git Konfiguration");
-      console.log("├── POST /api/git-backup/test-url       - URL-Authentifizierung testen");
-      console.log("├── POST /api/git-backup/test           - Vollständiger Git Verbindungstest");
-      console.log("├── POST /api/git-backup/reload-config  - Konfiguration neu laden");
-      console.log("├── GET  /api/git-backup/debug          - Basis Debug-Informationen");
-      console.log("└── GET  /api/system                    - Erweiterte Systeminfos");
-      console.log("===========================================================");
+      console.log(
+        "├── GET  /api/git-backup/debug-config   - Vollständige Git Konfiguration"
+      );
+      console.log(
+        "├── POST /api/git-backup/test-url       - URL-Authentifizierung testen"
+      );
+      console.log(
+        "├── POST /api/git-backup/test           - Vollständiger Git Verbindungstest"
+      );
+      console.log(
+        "├── POST /api/git-backup/reload-config  - Konfiguration neu laden"
+      );
+      console.log(
+        "├── GET  /api/git-backup/debug          - Basis Debug-Informationen"
+      );
+      console.log(
+        "└── GET  /api/system                    - Erweiterte Systeminfos"
+      );
+      console.log(
+        "==========================================================="
+      );
       console.log("");
-      
+
       // Troubleshooting Guide
       console.log("🚨 =================== TROUBLESHOOTING ===================");
-      console.log("Bei Git Push Problemen ('Username for https://github.com'):");
-      console.log("1. 🔍 Prüfe Konfiguration: GET /api/git-backup/debug-config");
+      console.log(
+        "Bei Git Push Problemen ('Username for https://github.com'):"
+      );
+      console.log(
+        "1. 🔍 Prüfe Konfiguration: GET /api/git-backup/debug-config"
+      );
       console.log("2. 🧪 Teste URL: POST /api/git-backup/test-url");
       console.log("3. 🔧 Vervollständige Konfiguration im Git Backup Tab");
       console.log("4. 🔄 Teste Verbindung mit 'Verbindung testen' Button");
@@ -2488,19 +3116,29 @@ class DatabaseBackupTool {
       console.log("├── ❌ Personal Access Token fehlt oder ist ungültig");
       console.log("├── ❌ Token hat nicht die 'repo' Berechtigung");
       console.log("├── ❌ Username stimmt nicht mit Git-Provider überein");
-      console.log("├── ❌ Repository URL ist falsch oder Repository existiert nicht");
-      console.log("└── ❌ Umgebungsvariablen überschreiben Web-Interface Werte");
-      console.log("===========================================================");
+      console.log(
+        "├── ❌ Repository URL ist falsch oder Repository existiert nicht"
+      );
+      console.log(
+        "└── ❌ Umgebungsvariablen überschreiben Web-Interface Werte"
+      );
+      console.log(
+        "==========================================================="
+      );
       console.log("");
-      
+
       console.log(
         "⚠️  WICHTIG: Ändere die Standard-Passwörter nach dem ersten Login!"
       );
       console.log("");
       console.log("🌐 Web-Interface: http://" + host + ":" + port);
-      console.log("📖 Logs: Verfolge diese Konsole für detaillierte Informationen");
+      console.log(
+        "📖 Logs: Verfolge diese Konsole für detaillierte Informationen"
+      );
       console.log("");
-      console.log("🎉 Ready for Database Backups mit Enhanced Git Integration! 🎉");
+      console.log(
+        "🎉 Ready for Database Backups mit Enhanced Git Integration! 🎉"
+      );
     });
   }
 }
@@ -2511,7 +3149,11 @@ process.on("SIGTERM", () => {
   console.log("🛑 SIGTERM empfangen, beende Database Backup Tool...");
   console.log("📊 Prozess-Statistiken:");
   console.log(`   Uptime: ${Math.floor(process.uptime() / 60)} Minuten`);
-  console.log(`   Memory Usage: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
+  console.log(
+    `   Memory Usage: ${Math.round(
+      process.memoryUsage().heapUsed / 1024 / 1024
+    )} MB`
+  );
   console.log("✅ Graceful Shutdown abgeschlossen");
   process.exit(0);
 });
@@ -2521,17 +3163,21 @@ process.on("SIGINT", () => {
   console.log("🛑 SIGINT empfangen, beende Database Backup Tool...");
   console.log("📊 Prozess-Statistiken:");
   console.log(`   Uptime: ${Math.floor(process.uptime() / 60)} Minuten`);
-  console.log(`   Memory Usage: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
+  console.log(
+    `   Memory Usage: ${Math.round(
+      process.memoryUsage().heapUsed / 1024 / 1024
+    )} MB`
+  );
   console.log("✅ Graceful Shutdown abgeschlossen");
   process.exit(0);
 });
 
 // Enhanced Error Handling mit Git Context
-process.on('uncaughtException', (error) => {
+process.on("uncaughtException", (error) => {
   console.error("❌ UNCAUGHT EXCEPTION:");
   console.error(`   Error: ${error.message}`);
   console.error(`   Stack: ${error.stack}`);
-  if (error.message.includes('git')) {
+  if (error.message.includes("git")) {
     console.error("   → Dies könnte ein Git-bezogenes Problem sein");
     console.error("   → Prüfe Git Backup Konfiguration und Logs");
   }
@@ -2539,11 +3185,11 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ UNHANDLED PROMISE REJECTION:");
   console.error(`   Reason: ${reason}`);
   console.error(`   Promise: ${promise}`);
-  if (reason && reason.toString().includes('git')) {
+  if (reason && reason.toString().includes("git")) {
     console.error("   → Dies könnte ein Git-bezogenes Problem sein");
     console.error("   → Verwende Debug-APIs für detaillierte Diagnose");
   }
