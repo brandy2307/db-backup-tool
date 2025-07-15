@@ -16,6 +16,8 @@ const crypto = require("crypto");
 class DatabaseBackupTool {
   constructor() {
     this.app = express();
+    this.secretsFile = path.join("./backups", '.git-secrets.enc'); // Temporärer Pfad
+    this.encryptionKey = "temporary-key"; // Temporärer Schlüssel
     this.config = this.loadConfig();
     this.users = new Map();
     this.backupJobs = new Map();
@@ -81,20 +83,17 @@ class DatabaseBackupTool {
         config.gitBackup = config.gitBackup || {};
         config.gitBackup.branch = process.env.GIT_BACKUP_BRANCH;
       }
+
+      // === GEÄNDERT: Token-Behandlung ===
       if (process.env.GIT_BACKUP_TOKEN) {
         // Umgebungsvariable hat Priorität
         config.gitBackup = config.gitBackup || {};
         config.gitBackup.token = process.env.GIT_BACKUP_TOKEN;
         console.log('🔑 [CONFIG] Git Token aus Umgebungsvariable geladen');
       } else if (config.gitBackup && config.gitBackup.enabled) {
-        // Versuche Token aus verschlüsselter Datei zu laden
-        const savedToken = this.loadGitToken();
-        if (savedToken) {
-          config.gitBackup.token = savedToken;
-          console.log('🔑 [CONFIG] Git Token aus verschlüsselter Datei geladen');
-        } else {
-          console.log('⚠️ [CONFIG] Kein gespeicherter Git Token gefunden');
-        }
+        // === NEU: VERZÖGERTES Token-Laden ===
+        // Token wird später im init() geladen, wenn alle Pfade korrekt sind
+        console.log('⏳ [CONFIG] Token-Laden wird verzögert bis init()');
       }
 
       // Repository-Informationen fest setzen (nicht überschreibbar)
