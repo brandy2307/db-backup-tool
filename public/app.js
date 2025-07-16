@@ -341,6 +341,42 @@ function initializeEventListeners() {
   if (manualUpdateButton) {
     manualUpdateButton.addEventListener('click', manualUpdate);
   }
+
+  // Security Tab Buttons
+  const setup2faBtn = document.getElementById('setup-2fa-btn');
+  if (setup2faBtn) {
+    setup2faBtn.addEventListener('click', setup2FA);
+  }
+
+  const disable2faBtn = document.getElementById('disable-2fa-btn');
+  if (disable2faBtn) {
+    disable2faBtn.addEventListener('click', disable2FA);
+  }
+
+  const changePasswordBtn = document.querySelector('.security-btn.warning');
+  if (changePasswordBtn && changePasswordBtn.textContent.includes('Passwort ändern')) {
+    changePasswordBtn.addEventListener('click', changePassword);
+  }
+
+  const showPasswordReqsBtn = document.querySelector('.security-btn.primary');
+  if (showPasswordReqsBtn && showPasswordReqsBtn.textContent.includes('Passwort-Anforderungen')) {
+    showPasswordReqsBtn.addEventListener('click', showPasswordRequirements);
+  }
+
+  const loadSessionsBtn = document.querySelector('.security-btn.primary');
+  if (loadSessionsBtn && loadSessionsBtn.textContent.includes('Sessions laden')) {
+    loadSessionsBtn.addEventListener('click', loadActiveSessions);
+  }
+
+  const terminateSessionsBtn = document.querySelector('.security-btn.danger');
+  if (terminateSessionsBtn && terminateSessionsBtn.textContent.includes('Andere Sessions beenden')) {
+    terminateSessionsBtn.addEventListener('click', terminateAllOtherSessions);
+  }
+
+  const refreshSecurityBtn = document.querySelector('.security-btn.primary');
+  if (refreshSecurityBtn && refreshSecurityBtn.textContent.includes('Einstellungen aktualisieren')) {
+    refreshSecurityBtn.addEventListener('click', refreshSecurityInfo);
+  }
 }
 
 // Alle API-Aufrufe mit credentials erweitern
@@ -1562,3 +1598,141 @@ window.addEventListener('offline', function() {
 });
 
 console.log('🛡️ Secure Database Backup Tool - Complete Enhanced Frontend JavaScript vollständig geladen');
+// ====== FUNCTIONS MOVED FROM INDEX.HTML ======
+
+// Security Tab Functions
+function showPasswordRequirements() {
+    const reqDiv = document.getElementById('password-requirements');
+    if (reqDiv) {
+        if (reqDiv.style.display === 'none') {
+            reqDiv.style.display = 'block';
+        } else {
+            reqDiv.style.display = 'none';
+        }
+    }
+}
+
+async function refreshSecurityInfo() {
+    try {
+        await checkSecurityStatus();
+        
+        if (securityInfo) {
+            updateSecurityDisplay();
+            showSuccess('security-settings-result', 'Sicherheits-Informationen aktualisiert');
+        }
+    } catch (error) {
+        showError('security-settings-result', 'Fehler beim Laden der Sicherheits-Informationen');
+    }
+}
+
+function updateSecurityDisplay() {
+    if (!securityInfo) return;
+    
+    // Update metrics
+    const activeSessionsCount = document.getElementById('active-sessions-count');
+    const securityLevel = document.getElementById('security-level');
+    
+    if (activeSessionsCount) {
+        activeSessionsCount.textContent = securityInfo.activeSessions || '0';
+    }
+    
+    if (securityLevel) {
+        let level = 'Niedrig';
+        let levelClass = 'danger';
+        
+        if (securityInfo.has2FA && securityInfo.httpsEnabled && securityInfo.strongPasswordsEnabled) {
+            level = 'Hoch';
+            levelClass = 'secure';
+        } else if (securityInfo.httpsEnabled || securityInfo.has2FA) {
+            level = 'Mittel';
+            levelClass = 'warning';
+        }
+        
+        securityLevel.textContent = level;
+        if (securityLevel.parentElement) {
+            securityLevel.parentElement.className = `metric-card ${levelClass}`;
+        }
+    }
+    
+    // Update 2FA Status
+    const twoFAStatus = document.getElementById('2fa-status');
+    const setup2FABtn = document.getElementById('setup-2fa-btn');
+    const disable2FABtn = document.getElementById('disable-2fa-btn');
+    
+    if (twoFAStatus) {
+        if (securityInfo.has2FA) {
+            twoFAStatus.innerHTML = `
+                <div class="alert success">
+                    <strong>✅ 2FA ist aktiviert</strong><br>
+                    Dein Account ist mit Zwei-Faktor-Authentifizierung geschützt.
+                </div>
+            `;
+            if (setup2FABtn) setup2FABtn.style.display = 'none';
+            if (disable2FABtn) disable2FABtn.style.display = 'inline-block';
+        } else {
+            twoFAStatus.innerHTML = `
+                <div class="alert warning">
+                    <strong>⚠️ 2FA ist nicht aktiviert</strong><br>
+                    Aktiviere 2FA für zusätzliche Sicherheit.
+                </div>
+            `;
+            if (setup2FABtn) setup2FABtn.style.display = 'inline-block';
+            if (disable2FABtn) disable2FABtn.style.display = 'none';
+        }
+    }
+    
+    // Update Security Settings Info
+    const securitySettingsInfo = document.getElementById('security-settings-info');
+    if (securitySettingsInfo) {
+        securitySettingsInfo.innerHTML = `
+            <div class="security-status-grid">
+                <div class="security-card ${securityInfo.httpsEnabled ? 'secure' : 'warning'}">
+                    <h4>🔐 HTTPS</h4>
+                    <div class="value">${securityInfo.httpsEnabled ? 'AN' : 'AUS'}</div>
+                </div>
+                <div class="security-card ${securityInfo.has2FA ? 'secure' : 'warning'}">
+                    <h4>🛡️ 2FA</h4>
+                    <div class="value">${securityInfo.has2FA ? 'AN' : 'AUS'}</div>
+                </div>
+                <div class="security-card ${securityInfo.strongPasswordsEnabled ? 'secure' : 'warning'}">
+                    <h4>🔑 Starke Passwörter</h4>
+                    <div class="value">${securityInfo.strongPasswordsEnabled ? 'AN' : 'AUS'}</div>
+                </div>
+            </div>
+            <p><strong>Session Timeout:</strong> ${securityInfo.sessionTimeout} Minuten</p>
+            <p><strong>Max. Login-Versuche:</strong> ${securityInfo.maxFailedAttempts}</p>
+            <p><strong>CAPTCHA Schwelle:</strong> ${securityInfo.captchaThreshold} Fehlversuche</p>
+            <p><strong>Letzter Login:</strong> ${securityInfo.lastLogin ? new Date(securityInfo.lastLogin).toLocaleString('de-DE') : 'Unbekannt'}</p>
+        `;
+    }
+}
+
+async function terminateAllOtherSessions() {
+    if (confirm('Alle anderen Sessions beenden? Du bleibst nur in der aktuellen Session angemeldet.')) {
+        try {
+            const response = await makeAuthenticatedRequest('/api/active-sessions');
+            const data = await response.json();
+            
+            if (response.ok) {
+                const otherSessions = data.sessions.filter(session => !session.current);
+                
+                for (const session of otherSessions) {
+                    await makeAuthenticatedRequest(`/api/session/${session.id}`, {
+                        method: 'DELETE'
+                    });
+                }
+                
+                showSuccess('sessions-result', `${otherSessions.length} andere Sessions beendet`);
+                loadActiveSessions();
+            }
+        } catch (error) {
+            showError('sessions-result', 'Fehler beim Beenden der Sessions: ' + error.message);
+        }
+    }
+}
+
+// Initialize security display when tab is opened
+function initSecurityTab() {
+    refreshSecurityInfo();
+    loadActiveSessions();
+}
