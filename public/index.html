@@ -3,29 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Database Backup Tool</title>
+    <title>Database Backup Tool - Secure</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="header">
-        <h1>Database Backup Tool</h1>
-        <p>Automatisierte Datenbank-Backups für MySQL, PostgreSQL und MongoDB mit Git Integration</p>
+        <h1>🛡️ Database Backup Tool</h1>
+        <p>Sichere Datenbank-Backups mit erweiterten Sicherheitsfunktionen</p>
+        <div class="security-badges">
+            <span class="security-badge">🔐 HTTPS</span>
+            <span class="security-badge">🛡️ 2FA</span>
+            <span class="security-badge">🤖 CAPTCHA</span>
+            <span class="security-badge">🔒 Verschlüsselung</span>
+        </div>
     </div>
 
     <div class="container">
         <div id="login-section">
             <div class="login-form">
-                <h2>Anmeldung</h2>
+                <h2>🔐 Sichere Anmeldung</h2>
+                
+                <div class="security-status">
+                    <div class="security-indicator">
+                        <div class="icon secure"></div>
+                        <span>Verbindung verschlüsselt</span>
+                    </div>
+                    <div class="security-indicator">
+                        <div class="icon secure"></div>
+                        <span>Brute-Force Schutz aktiv</span>
+                    </div>
+                    <div class="security-indicator">
+                        <div class="icon secure"></div>
+                        <span>Session-Sicherheit</span>
+                    </div>
+                </div>
+
                 <form id="loginForm">
                     <div class="form-group">
-                        <label for="username">Benutzername:</label>
-                        <input type="text" id="username" required>
+                        <label for="username">👤 Benutzername:</label>
+                        <input type="text" id="username" required autocomplete="username">
                     </div>
+
                     <div class="form-group">
-                        <label for="password">Passwort:</label>
-                        <input type="password" id="password" required>
+                        <label for="password">🔑 Passwort:</label>
+                        <input type="password" id="password" required autocomplete="current-password">
+                        <div class="password-strength hidden">
+                            <div class="password-strength-bar"></div>
+                        </div>
                     </div>
-                    <button type="submit">Anmelden</button>
+
+                    <!-- CAPTCHA Container (wird dynamisch eingeblendet) -->
+                    <div id="captcha-container" class="captcha-container hidden">
+                        <h4>🤖 Sicherheitsprüfung</h4>
+                        <div class="captcha-display">
+                            <div id="captcha-image" class="captcha-image"></div>
+                            <button type="button" class="captcha-refresh" onclick="refreshCaptcha()">🔄</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="captcha-text">Code eingeben:</label>
+                            <input type="text" id="captcha-text" placeholder="Code hier eingeben" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <!-- 2FA Container (wird dynamisch eingeblendet) -->
+                    <div id="two-factor-container" class="two-factor-container hidden">
+                        <h4>🔐 Zwei-Faktor-Authentifizierung</h4>
+                        <p>Bitte gib den 6-stelligen Code aus deiner Authenticator-App ein:</p>
+                        <div class="form-group">
+                            <label for="two-factor-token">2FA-Code:</label>
+                            <input type="text" id="two-factor-token" placeholder="123456" maxlength="6" autocomplete="one-time-code">
+                        </div>
+                    </div>
+
+                    <div class="remember-me">
+                        <input type="checkbox" id="remember-me">
+                        <label for="remember-me">Angemeldet bleiben (7 Tage)</label>
+                    </div>
+
+                    <button type="submit" id="login-button">
+                        <span id="login-text">Anmelden</span>
+                    </button>
                 </form>
                 <div id="loginError" class="error"></div>
             </div>
@@ -37,6 +95,7 @@
                 <button class="tab" onclick="showTab('backups')">Backups verwalten</button>
                 <button class="tab" onclick="showTab('schedule')">Zeitplan</button>
                 <button class="tab" onclick="showTab('git-backup')">Git Backup</button>
+                <button class="tab" onclick="showTab('security')">🛡️ Sicherheit</button>
                 <button class="tab" onclick="showTab('system')">System</button>
             </div>
 
@@ -249,6 +308,117 @@
                 </div>
             </div>
 
+            <!-- SECURITY TAB -->
+            <div id="security-content" class="tab-content">
+                <h2>🛡️ Sicherheits-Zentrale</h2>
+
+                <!-- Security Overview -->
+                <div class="security-section">
+                    <h3>📊 Sicherheits-Übersicht</h3>
+                    <div class="security-metrics" id="security-metrics">
+                        <div class="metric-card">
+                            <div class="metric-value" id="active-sessions-count">-</div>
+                            <div class="metric-label">Aktive Sessions</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="failed-attempts-count">-</div>
+                            <div class="metric-label">Fehlversuche</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="security-level">-</div>
+                            <div class="metric-label">Sicherheitslevel</div>
+                        </div>
+                    </div>
+                    <div id="security-overview-result"></div>
+                </div>
+
+                <!-- 2FA Management -->
+                <div class="security-section">
+                    <h3>🔐 Zwei-Faktor-Authentifizierung</h3>
+                    <div id="2fa-status">
+                        <p>Lade 2FA Status...</p>
+                    </div>
+                    <div class="security-actions">
+                        <button class="security-btn primary" onclick="setup2FA()" id="setup-2fa-btn">2FA Einrichten</button>
+                        <button class="security-btn danger" onclick="disable2FA()" id="disable-2fa-btn" style="display: none;">2FA Deaktivieren</button>
+                    </div>
+                    <div id="qr-code-container" class="qr-code-container" style="display: none;"></div>
+                    <div id="2fa-result"></div>
+                </div>
+
+                <!-- Password Management -->
+                <div class="security-section">
+                    <h3>🔑 Passwort-Verwaltung</h3>
+                    <p>Stelle sicher, dass dein Passwort den Sicherheitsanforderungen entspricht.</p>
+                    <div class="security-actions">
+                        <button class="security-btn warning" onclick="changePassword()">Passwort ändern</button>
+                        <button class="security-btn primary" onclick="showPasswordRequirements()">Passwort-Anforderungen</button>
+                    </div>
+                    <div id="password-requirements" style="display: none; margin-top: 15px;">
+                        <h4>Passwort-Anforderungen:</h4>
+                        <ul style="color: #aaa; margin-left: 20px;">
+                            <li>Mindestens 12 Zeichen</li>
+                            <li>Mindestens einen Großbuchstaben</li>
+                            <li>Mindestens einen Kleinbuchstaben</li>
+                            <li>Mindestens eine Zahl</li>
+                            <li>Mindestens ein Sonderzeichen</li>
+                        </ul>
+                    </div>
+                    <div id="password-result"></div>
+                </div>
+
+                <!-- Session Management -->
+                <div class="security-section">
+                    <h3>🖥️ Session-Verwaltung</h3>
+                    <p>Überwache und verwalte deine aktiven Anmeldungen.</p>
+                    <div class="security-actions">
+                        <button class="security-btn primary" onclick="loadActiveSessions()">Sessions laden</button>
+                        <button class="security-btn danger" onclick="terminateAllOtherSessions()">Andere Sessions beenden</button>
+                    </div>
+                    <div id="active-sessions-list" class="sessions-list"></div>
+                    <div id="sessions-result"></div>
+                </div>
+
+                <!-- Security Settings -->
+                <div class="security-section">
+                    <h3>⚙️ Sicherheits-Einstellungen</h3>
+                    <div id="security-settings-info">
+                        <p>Lade Sicherheits-Einstellungen...</p>
+                    </div>
+                    <div class="security-actions">
+                        <button class="security-btn primary" onclick="refreshSecurityInfo()">Einstellungen aktualisieren</button>
+                    </div>
+                    <div id="security-settings-result"></div>
+                </div>
+
+                <!-- Security Log -->
+                <div class="security-section">
+                    <h3>📋 Sicherheits-Protokoll</h3>
+                    <p>Aktuelle Sicherheitsereignisse und -warnungen.</p>
+                    <div id="security-log">
+                        <div class="alert info">
+                            <strong>ℹ️ Info:</strong> Sicherheits-Protokollierung ist aktiv.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Tips -->
+                <div class="security-section">
+                    <h3>💡 Sicherheits-Tipps</h3>
+                    <div class="security-tips">
+                        <div class="alert info">
+                            <strong>🔐 Tipp:</strong> Aktiviere 2FA für zusätzliche Sicherheit deines Accounts.
+                        </div>
+                        <div class="alert warning">
+                            <strong>⚠️ Wichtig:</strong> Verwende für jede Anwendung ein einzigartiges, starkes Passwort.
+                        </div>
+                        <div class="alert success">
+                            <strong>✅ Empfehlung:</strong> Überwache regelmäßig deine aktiven Sessions und beende unbekannte.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="system-content" class="tab-content">
                 <h2>System-Informationen</h2>
                 
@@ -276,6 +446,150 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Security Tab Functions
+        function showPasswordRequirements() {
+            const reqDiv = document.getElementById('password-requirements');
+            if (reqDiv.style.display === 'none') {
+                reqDiv.style.display = 'block';
+            } else {
+                reqDiv.style.display = 'none';
+            }
+        }
+
+        async function refreshSecurityInfo() {
+            try {
+                await checkSecurityStatus();
+                
+                if (securityInfo) {
+                    updateSecurityDisplay();
+                    showSuccess('security-settings-result', 'Sicherheits-Informationen aktualisiert');
+                }
+            } catch (error) {
+                showError('security-settings-result', 'Fehler beim Laden der Sicherheits-Informationen');
+            }
+        }
+
+        function updateSecurityDisplay() {
+            if (!securityInfo) return;
+            
+            // Update metrics
+            const activeSessionsCount = document.getElementById('active-sessions-count');
+            const securityLevel = document.getElementById('security-level');
+            
+            if (activeSessionsCount) {
+                activeSessionsCount.textContent = securityInfo.activeSessions || '0';
+            }
+            
+            if (securityLevel) {
+                let level = 'Niedrig';
+                let levelClass = 'danger';
+                
+                if (securityInfo.has2FA && securityInfo.httpsEnabled && securityInfo.strongPasswordsEnabled) {
+                    level = 'Hoch';
+                    levelClass = 'secure';
+                } else if (securityInfo.httpsEnabled || securityInfo.has2FA) {
+                    level = 'Mittel';
+                    levelClass = 'warning';
+                }
+                
+                securityLevel.textContent = level;
+                securityLevel.parentElement.className = `metric-card ${levelClass}`;
+            }
+            
+            // Update 2FA Status
+            const twoFAStatus = document.getElementById('2fa-status');
+            const setup2FABtn = document.getElementById('setup-2fa-btn');
+            const disable2FABtn = document.getElementById('disable-2fa-btn');
+            
+            if (twoFAStatus) {
+                if (securityInfo.has2FA) {
+                    twoFAStatus.innerHTML = `
+                        <div class="alert success">
+                            <strong>✅ 2FA ist aktiviert</strong><br>
+                            Dein Account ist mit Zwei-Faktor-Authentifizierung geschützt.
+                        </div>
+                    `;
+                    if (setup2FABtn) setup2FABtn.style.display = 'none';
+                    if (disable2FABtn) disable2FABtn.style.display = 'inline-block';
+                } else {
+                    twoFAStatus.innerHTML = `
+                        <div class="alert warning">
+                            <strong>⚠️ 2FA ist nicht aktiviert</strong><br>
+                            Aktiviere 2FA für zusätzliche Sicherheit.
+                        </div>
+                    `;
+                    if (setup2FABtn) setup2FABtn.style.display = 'inline-block';
+                    if (disable2FABtn) disable2FABtn.style.display = 'none';
+                }
+            }
+            
+            // Update Security Settings Info
+            const securitySettingsInfo = document.getElementById('security-settings-info');
+            if (securitySettingsInfo) {
+                securitySettingsInfo.innerHTML = `
+                    <div class="security-status-grid">
+                        <div class="security-card ${securityInfo.httpsEnabled ? 'secure' : 'warning'}">
+                            <h4>🔐 HTTPS</h4>
+                            <div class="value">${securityInfo.httpsEnabled ? 'AN' : 'AUS'}</div>
+                        </div>
+                        <div class="security-card ${securityInfo.has2FA ? 'secure' : 'warning'}">
+                            <h4>🛡️ 2FA</h4>
+                            <div class="value">${securityInfo.has2FA ? 'AN' : 'AUS'}</div>
+                        </div>
+                        <div class="security-card ${securityInfo.strongPasswordsEnabled ? 'secure' : 'warning'}">
+                            <h4>🔑 Starke Passwörter</h4>
+                            <div class="value">${securityInfo.strongPasswordsEnabled ? 'AN' : 'AUS'}</div>
+                        </div>
+                    </div>
+                    <p><strong>Session Timeout:</strong> ${securityInfo.sessionTimeout} Minuten</p>
+                    <p><strong>Max. Login-Versuche:</strong> ${securityInfo.maxFailedAttempts}</p>
+                    <p><strong>CAPTCHA Schwelle:</strong> ${securityInfo.captchaThreshold} Fehlversuche</p>
+                    <p><strong>Letzter Login:</strong> ${securityInfo.lastLogin ? new Date(securityInfo.lastLogin).toLocaleString('de-DE') : 'Unbekannt'}</p>
+                `;
+            }
+        }
+
+        async function terminateAllOtherSessions() {
+            if (confirm('Alle anderen Sessions beenden? Du bleibst nur in der aktuellen Session angemeldet.')) {
+                try {
+                    const response = await makeAuthenticatedRequest('/api/active-sessions');
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        const otherSessions = data.sessions.filter(session => !session.current);
+                        
+                        for (const session of otherSessions) {
+                            await makeAuthenticatedRequest(`/api/session/${session.id}`, {
+                                method: 'DELETE'
+                            });
+                        }
+                        
+                        showSuccess('sessions-result', `${otherSessions.length} andere Sessions beendet`);
+                        loadActiveSessions();
+                    }
+                } catch (error) {
+                    showError('sessions-result', 'Fehler beim Beenden der Sessions: ' + error.message);
+                }
+            }
+        }
+
+        // Initialize security display when tab is opened
+        function initSecurityTab() {
+            refreshSecurityInfo();
+            loadActiveSessions();
+        }
+
+        // Override showTab function to handle security tab
+        const originalShowTab = showTab;
+        function showTab(tabName) {
+            originalShowTab(tabName);
+            if (tabName === 'security') {
+                initSecurityTab();
+            }
+        }
+    </script>
 
     <script src="app.js"></script>
 </body>

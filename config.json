@@ -1,14 +1,36 @@
 {
   "server": {
     "port": 8080,
+    "httpsPort": 8443,
     "host": "0.0.0.0"
   },
   "security": {
-    "sessionSecret": "change-this-secret-key-in-production",
-    "jwtSecret": "change-this-jwt-secret-in-production",
+    "sessionSecret": "change-this-secret-key-in-production-min-32-chars",
+    "jwtSecret": "change-this-jwt-secret-in-production-min-32-chars",
+    "requireHttps": false,
+    "enable2FA": false,
+    "strongPasswords": true,
+    "maxFailedAttempts": 5,
+    "captchaThreshold": 3,
+    "lockoutDuration": 900000,
+    "sessionTimeout": 1800000,
     "defaultAdmin": {
       "username": "admin",
       "password": "admin123"
+    },
+    "rateLimiting": {
+      "enabled": true,
+      "windowMs": 900000,
+      "maxLoginAttempts": 5,
+      "maxApiRequests": 100,
+      "maxCaptchaRequests": 10
+    },
+    "headers": {
+      "hsts": true,
+      "csp": true,
+      "xssProtection": true,
+      "noSniff": true,
+      "frameOptions": "DENY"
     }
   },
   "backup": {
@@ -18,7 +40,12 @@
   },
   "logging": {
     "level": "info",
-    "file": "./logs/app.log"
+    "file": "./logs/app.log",
+    "security": {
+      "enabled": true,
+      "file": "./logs/security.log",
+      "level": "warn"
+    }
   },
   "updates": {
     "autoUpdate": true,
