@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const http = require("http");
-const { exec } = require("child_process");
+const { exec, execSync } = require("child_process");
 const cron = require("node-cron");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -179,25 +179,26 @@ class DatabaseBackupTool {
       const certPath = path.join(this.sslCertPath, "certificate.crt");
 
       if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-        console.log("🔐 [SSL] Generiere selbstsignierte SSL-Zertifikate...");
+        console.log("🔐 [SSL] Generiere selbstsignierte SSL-Zertifikate (synchron)...");
         
         const keyCommand = `openssl genrsa -out "${keyPath}" 2048`;
         const certCommand = `openssl req -new -x509 -key "${keyPath}" -out "${certPath}" -days 365 -subj "/C=DE/ST=NRW/L=Sprockhovel/O=DB Backup Tool/CN=localhost"`;
         
-        exec(keyCommand, (error) => {
-          if (error) {
-            console.error("❌ [SSL] Fehler beim Generieren des privaten Schlüssels:", error);
-            return;
-          }
-          
-          exec(certCommand, (error) => {
-            if (error) {
-              console.error("❌ [SSL] Fehler beim Generieren des Zertifikats:", error);
-              return;
+        try {
+          execSync(keyCommand);
+          console.log("✅ [SSL] Privater Schlüssel erstellt.");
+          execSync(certCommand);
+          console.log("✅ [SSL] Zertifikat erstellt.");
+          console.log("✅ [SSL] Selbstsignierte SSL-Zertifikate erfolgreich erstellt.");
+        } catch (error) {
+            console.error("❌ [SSL] Fehler beim Generieren der Zertifikate:", error.message);
+            console.error("   Stelle sicher, dass OpenSSL installiert und im System-PATH verfügbar ist.");
+            // Beende den Prozess, wenn Zertifikate nicht erstellt werden können, aber HTTPS erforderlich ist.
+            if (this.config.security.requireHttps) {
+                console.error("❌ [FATAL] HTTPS ist erforderlich, aber Zertifikate konnten nicht erstellt werden. Server wird beendet.");
+                process.exit(1);
             }
-            console.log("✅ [SSL] Selbstsignierte SSL-Zertifikate erstellt");
-          });
-        });
+        }
       }
     } catch (error) {
       console.error("❌ [SSL] Fehler beim SSL-Setup:", error);
