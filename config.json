@@ -7,7 +7,7 @@
   "security": {
     "sessionSecret": "change-this-secret-key-in-production-min-32-chars",
     "jwtSecret": "change-this-jwt-secret-in-production-min-32-chars",
-    "requireHttps": false,
+    "requireHttps": true,
     "enable2FA": false,
     "strongPasswords": true,
     "maxFailedAttempts": 5,
