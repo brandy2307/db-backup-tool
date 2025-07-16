@@ -1032,8 +1032,7 @@ class DatabaseBackupTool {
     this.app.use(compression());
     this.app.use(cors({
       origin: this.securityConfig.requireHttps ? 
-        (req, callback) => {
-          const origin = req.header('Origin');
+        (origin, callback) => {
           if (!origin || origin.startsWith('https://')) {
             callback(null, true);
           } else {
