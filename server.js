@@ -23,6 +23,7 @@ const qrcode = require("qrcode");
 
 // ====== SSL-MANAGEMENT IMPORT ======
 const SSLCertificateManager = require('./ssl-management.js');
+const SSLHealthCheck = require('./ssl-health-check.js');
 
 class DatabaseBackupTool {
   constructor() {
@@ -3096,6 +3097,11 @@ class DatabaseBackupTool {
             console.log("[INIT STEP 3/9] SSL initialisiert.");
         } else {
             console.log("[INIT STEP 3/9] SSL übersprungen.");
+        }
+
+        if (this.securityConfig.requireHttps) {
+        this.sslHealthCheck = new SSLHealthCheck(this.sslManager);
+        this.sslHealthCheck.startContinuousMonitoring(60); // Alle 60 Minuten
         }
 
         console.log("[INIT STEP 4/9] Setup Middleware...");

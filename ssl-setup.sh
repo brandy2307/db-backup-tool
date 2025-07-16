@@ -1,7 +1,6 @@
 #!/bin/bash
-# SSL-Setup Script für Database Backup Tool
-# Datei: ssl-setup.sh
-# Platzierung: /home/container/db-backup-tool/ssl-setup.sh
+# Enhanced SSL-Setup Script für Database Backup Tool
+# Erweiterte SSL-Generierung mit besserer Fehlerbehandlung und Validierung
 
 set -e
 
@@ -12,19 +11,35 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Verzeichnisse
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SSL_DIR="$SCRIPT_DIR/ssl"
-APP_DIR="$SCRIPT_DIR"
-
-# Konfiguration aus Umgebungsvariablen
+# Erweiterte Konfiguration
 DOMAIN="${SSL_DOMAIN:-localhost}"
 EMAIL="${SSL_EMAIL:-admin@localhost}"
 METHOD="${SSL_METHOD:-selfsigned}"
 AUTO_RENEWAL="${SSL_AUTO_RENEWAL:-true}"
 CLOUDFLARE_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+KEY_SIZE="${SSL_KEY_SIZE:-4096}"
+CERT_VALIDITY="${SSL_CERT_VALIDITY:-365}"
 
-echo -e "${BLUE}🔐 SSL-Setup für Database Backup Tool${NC}"
+# Verzeichnisse
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SSL_DIR="$SCRIPT_DIR/ssl"
+BACKUP_DIR="$SSL_DIR/backup-$(date +%Y%m%d-%H%M%S)"
+LOG_FILE="$SSL_DIR/ssl-setup.log"
+
+# Logging-Funktion
+log() {
+    local level="$1"
+    shift
+    local message="$@"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo -e "${timestamp} [${level}] ${message}" | tee -a "$LOG_FILE"
+}
+
+log_info() { log "INFO" "$@"; }
+log_warn() { log "WARN" "$@"; }
+log_error() { log "ERROR" "$@"; }
+
+echo -e "${BLUE}🔐 Enhanced SSL-Setup für Database Backup Tool${NC}"
 echo "============================================="
 echo -e "${BLUE}Script-Verzeichnis:${NC} $SCRIPT_DIR"
 echo -e "${BLUE}SSL-Verzeichnis:${NC} $SSL_DIR"
@@ -32,61 +47,171 @@ echo -e "${BLUE}Domain:${NC} $DOMAIN"
 echo -e "${BLUE}Email:${NC} $EMAIL"
 echo -e "${BLUE}Methode:${NC} $METHOD"
 echo -e "${BLUE}Auto-Renewal:${NC} $AUTO_RENEWAL"
+echo -e "${BLUE}Key-Größe:${NC} $KEY_SIZE bits"
+echo -e "${BLUE}Gültigkeit:${NC} $CERT_VALIDITY Tage"
 echo "============================================="
 
-# Prüfe ob wir im richtigen Verzeichnis sind
-if [ ! -f "$APP_DIR/server.js" ] || [ ! -f "$APP_DIR/package.json" ]; then
-    echo -e "${RED}❌ Fehler: Script muss im db-backup-tool Verzeichnis liegen!${NC}"
-    echo -e "${RED}   Erwartet: server.js und package.json im selben Verzeichnis${NC}"
-    echo -e "${RED}   Aktuell: $APP_DIR${NC}"
-    exit 1
-fi
+# Dependency Check
+check_dependencies() {
+    log_info "Prüfe System-Dependencies..."
+    
+    local deps=("openssl" "curl" "git")
+    local missing=()
+    
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing+=("$dep")
+        fi
+    done
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_error "Fehlende Dependencies: ${missing[*]}"
+        log_info "Installiere fehlende Dependencies..."
+        
+        # Debian/Ubuntu
+        if command -v apt-get &> /dev/null; then
+            apt-get update
+            apt-get install -y "${missing[@]}"
+        # CentOS/RHEL
+        elif command -v yum &> /dev/null; then
+            yum install -y "${missing[@]}"
+        # Alpine
+        elif command -v apk &> /dev/null; then
+            apk update
+            apk add "${missing[@]}"
+        else
+            log_error "Unbekannte Paket-Manager - installiere Dependencies manuell"
+            exit 1
+        fi
+    fi
+    
+    log_info "✅ Alle Dependencies verfügbar"
+}
 
-# SSL-Verzeichnis erstellen
-echo -e "${BLUE}📁 Erstelle SSL-Verzeichnis...${NC}"
-mkdir -p "$SSL_DIR"
-chmod 700 "$SSL_DIR"
+# SSL-Verzeichnis vorbereiten
+prepare_ssl_directory() {
+    log_info "Bereite SSL-Verzeichnis vor..."
+    
+    # Backup existierender Zertifikate
+    if [ -f "$SSL_DIR/fullchain.pem" ] || [ -f "$SSL_DIR/privkey.pem" ]; then
+        log_info "Erstelle Backup existierender Zertifikate..."
+        mkdir -p "$BACKUP_DIR"
+        
+        [ -f "$SSL_DIR/fullchain.pem" ] && cp "$SSL_DIR/fullchain.pem" "$BACKUP_DIR/"
+        [ -f "$SSL_DIR/privkey.pem" ] && cp "$SSL_DIR/privkey.pem" "$BACKUP_DIR/"
+        
+        log_info "✅ Backup erstellt: $BACKUP_DIR"
+    fi
+    
+    # SSL-Verzeichnis erstellen
+    mkdir -p "$SSL_DIR"
+    chmod 700 "$SSL_DIR"
+    
+    # Log-Datei initialisieren
+    touch "$LOG_FILE"
+    chmod 600 "$LOG_FILE"
+}
 
-# Hilfsfunktionen
-check_command() {
-    if ! command -v "$1" &> /dev/null; then
-        echo -e "${RED}❌ $1 ist nicht installiert${NC}"
+# Domain-Validierung
+validate_domain() {
+    log_info "Validiere Domain: $DOMAIN"
+    
+    # Domain-Format prüfen
+    if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+        log_error "Ungültiges Domain-Format: $DOMAIN"
         return 1
     fi
-    return 0
+    
+    # DNS-Auflösung prüfen (für Let's Encrypt)
+    if [ "$METHOD" = "letsencrypt" ]; then
+        if [ "$DOMAIN" = "localhost" ] || [ "$DOMAIN" = "127.0.0.1" ]; then
+            log_error "Let's Encrypt funktioniert nicht mit localhost/127.0.0.1"
+            return 1
+        fi
+        
+        if ! nslookup "$DOMAIN" &> /dev/null; then
+            log_warn "DNS-Auflösung für $DOMAIN fehlgeschlagen"
+            log_warn "Stelle sicher, dass die Domain öffentlich erreichbar ist"
+        fi
+    fi
+    
+    log_info "✅ Domain-Validierung erfolgreich"
 }
 
-install_certbot() {
-    echo -e "${YELLOW}📦 Installiere Certbot...${NC}"
-    apt update
-    apt install -y certbot python3-certbot-nginx
+# Self-Signed Zertifikat mit erweiterten Optionen
+create_selfsigned_cert() {
+    log_info "Erstelle Self-Signed Zertifikat..."
+    
+    local cert_file="$SSL_DIR/fullchain.pem"
+    local key_file="$SSL_DIR/privkey.pem"
+    local config_file="$SSL_DIR/openssl.cnf"
+    
+    # OpenSSL-Konfiguration erstellen
+    cat > "$config_file" << EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+C = DE
+ST = NRW
+L = Sprockhoevel
+O = DB Backup Tool
+CN = $DOMAIN
+
+[v3_req]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = $DOMAIN
+DNS.2 = *.${DOMAIN}
+DNS.3 = localhost
+IP.1 = 127.0.0.1
+IP.2 = ::1
+EOF
+
+    # Zertifikat erstellen
+    openssl req -x509 -newkey rsa:$KEY_SIZE \
+        -keyout "$key_file" \
+        -out "$cert_file" \
+        -days $CERT_VALIDITY \
+        -nodes \
+        -config "$config_file" \
+        -extensions v3_req
+    
+    # Aufräumen
+    rm -f "$config_file"
+    
+    log_info "✅ Self-Signed Zertifikat erstellt"
 }
 
-install_cloudflare_plugin() {
-    echo -e "${YELLOW}📦 Installiere Cloudflare Plugin...${NC}"
-    apt update
-    apt install -y python3-certbot-dns-cloudflare
-}
-
+# Let's Encrypt mit erweiterten Optionen
 create_letsencrypt_cert() {
-    echo -e "${GREEN}🔒 Erstelle Let's Encrypt Zertifikat...${NC}"
+    log_info "Erstelle Let's Encrypt Zertifikat..."
     
-    # Prüfe Domain
-    if [ "$DOMAIN" = "localhost" ] || [ "$DOMAIN" = "127.0.0.1" ]; then
-        echo -e "${RED}❌ Let's Encrypt funktioniert nicht mit localhost/127.0.0.1${NC}"
-        echo -e "${YELLOW}⚠️  Verwende Self-Signed Zertifikat als Fallback${NC}"
-        return 1
+    # Certbot installieren
+    if ! command -v certbot &> /dev/null; then
+        log_info "Installiere Certbot..."
+        
+        if command -v apt-get &> /dev/null; then
+            apt-get update
+            apt-get install -y certbot python3-certbot-nginx
+        elif command -v yum &> /dev/null; then
+            yum install -y certbot python3-certbot-nginx
+        elif command -v snap &> /dev/null; then
+            snap install --classic certbot
+        else
+            log_error "Kann Certbot nicht installieren"
+            return 1
+        fi
     fi
     
-    # Certbot installieren falls nicht vorhanden
-    if ! check_command certbot; then
-        install_certbot
-    fi
-    
-    # Temporär Port 80 für Standalone-Mode freigeben
-    echo -e "${BLUE}🔍 Prüfe Port 80...${NC}"
+    # Port 80 prüfen
     if netstat -tlnp | grep -q ":80 "; then
-        echo -e "${YELLOW}⚠️  Port 80 ist belegt - stoppe mögliche Services${NC}"
+        log_warn "Port 80 ist belegt - stoppe Services"
         systemctl stop nginx 2>/dev/null || true
         systemctl stop apache2 2>/dev/null || true
     fi
@@ -98,257 +223,280 @@ create_letsencrypt_cert() {
         --agree-tos \
         --email "$EMAIL" \
         --domains "$DOMAIN" \
+        --key-type rsa \
+        --rsa-key-size $KEY_SIZE \
         --preferred-challenges http \
-        --http-01-port 80 || return 1
+        --http-01-port 80 \
+        --cert-path "$SSL_DIR/fullchain.pem" \
+        --key-path "$SSL_DIR/privkey.pem"
     
     # Zertifikate kopieren
-    LETSENCRYPT_PATH="/etc/letsencrypt/live/$DOMAIN"
-    if [ -d "$LETSENCRYPT_PATH" ]; then
-        cp "$LETSENCRYPT_PATH/fullchain.pem" "$SSL_DIR/fullchain.pem"
-        cp "$LETSENCRYPT_PATH/privkey.pem" "$SSL_DIR/privkey.pem"
-        chmod 644 "$SSL_DIR/fullchain.pem"
-        chmod 600 "$SSL_DIR/privkey.pem"
-        echo -e "${GREEN}✅ Let's Encrypt Zertifikat erfolgreich erstellt${NC}"
-        return 0
+    local letsencrypt_path="/etc/letsencrypt/live/$DOMAIN"
+    if [ -d "$letsencrypt_path" ]; then
+        cp "$letsencrypt_path/fullchain.pem" "$SSL_DIR/fullchain.pem"
+        cp "$letsencrypt_path/privkey.pem" "$SSL_DIR/privkey.pem"
+        log_info "✅ Let's Encrypt Zertifikat erstellt"
     else
-        echo -e "${RED}❌ Let's Encrypt Verzeichnis nicht gefunden${NC}"
+        log_error "Let's Encrypt Zertifikat-Verzeichnis nicht gefunden"
         return 1
     fi
 }
 
+# Cloudflare Origin Certificate
 create_cloudflare_cert() {
-    echo -e "${GREEN}☁️  Erstelle Cloudflare Origin Certificate...${NC}"
+    log_info "Erstelle Cloudflare Origin Zertifikat..."
     
     if [ -z "$CLOUDFLARE_TOKEN" ]; then
-        echo -e "${RED}❌ CLOUDFLARE_API_TOKEN ist nicht gesetzt${NC}"
+        log_error "CLOUDFLARE_API_TOKEN ist erforderlich"
         return 1
     fi
     
-    # Certbot mit Cloudflare Plugin installieren
-    if ! check_command certbot; then
-        install_certbot
-    fi
-    
+    # Cloudflare Plugin installieren
     if ! certbot plugins | grep -q cloudflare; then
-        install_cloudflare_plugin
+        log_info "Installiere Cloudflare Plugin..."
+        
+        if command -v apt-get &> /dev/null; then
+            apt-get install -y python3-certbot-dns-cloudflare
+        elif command -v yum &> /dev/null; then
+            yum install -y python3-certbot-dns-cloudflare
+        else
+            pip3 install certbot-dns-cloudflare
+        fi
     fi
     
     # Credentials-Datei erstellen
-    CREDS_FILE="$SSL_DIR/.cloudflare-credentials"
-    cat > "$CREDS_FILE" << EOF
+    local creds_file="$SSL_DIR/.cloudflare-credentials"
+    cat > "$creds_file" << EOF
 dns_cloudflare_api_token = $CLOUDFLARE_TOKEN
 EOF
-    chmod 600 "$CREDS_FILE"
+    chmod 600 "$creds_file"
     
-    # Certbot mit Cloudflare DNS ausführen
+    # Certbot mit Cloudflare ausführen
     certbot certonly \
         --dns-cloudflare \
-        --dns-cloudflare-credentials "$CREDS_FILE" \
+        --dns-cloudflare-credentials "$creds_file" \
         --non-interactive \
         --agree-tos \
         --email "$EMAIL" \
-        --domains "$DOMAIN" || {
-        rm -f "$CREDS_FILE"
-        return 1
-    }
+        --domains "$DOMAIN" \
+        --key-type rsa \
+        --rsa-key-size $KEY_SIZE
     
     # Zertifikate kopieren
-    LETSENCRYPT_PATH="/etc/letsencrypt/live/$DOMAIN"
-    if [ -d "$LETSENCRYPT_PATH" ]; then
-        cp "$LETSENCRYPT_PATH/fullchain.pem" "$SSL_DIR/fullchain.pem"
-        cp "$LETSENCRYPT_PATH/privkey.pem" "$SSL_DIR/privkey.pem"
-        chmod 644 "$SSL_DIR/fullchain.pem"
-        chmod 600 "$SSL_DIR/privkey.pem"
-        rm -f "$CREDS_FILE"
-        echo -e "${GREEN}✅ Cloudflare Origin Certificate erfolgreich erstellt${NC}"
-        return 0
+    local letsencrypt_path="/etc/letsencrypt/live/$DOMAIN"
+    if [ -d "$letsencrypt_path" ]; then
+        cp "$letsencrypt_path/fullchain.pem" "$SSL_DIR/fullchain.pem"
+        cp "$letsencrypt_path/privkey.pem" "$SSL_DIR/privkey.pem"
+        log_info "✅ Cloudflare Origin Zertifikat erstellt"
     else
-        rm -f "$CREDS_FILE"
-        echo -e "${RED}❌ Cloudflare Zertifikat-Verzeichnis nicht gefunden${NC}"
-        return 1
-    fi
-}
-
-create_selfsigned_cert() {
-    echo -e "${YELLOW}🔧 Erstelle Self-Signed Zertifikat...${NC}"
-    
-    if ! check_command openssl; then
-        echo -e "${YELLOW}📦 Installiere OpenSSL...${NC}"
-        apt update
-        apt install -y openssl
-    fi
-    
-    openssl req -x509 -newkey rsa:4096 \
-        -keyout "$SSL_DIR/privkey.pem" \
-        -out "$SSL_DIR/fullchain.pem" \
-        -days 365 -nodes \
-        -subj "/C=DE/ST=NRW/L=Sprockhoevel/O=DB Backup Tool/CN=$DOMAIN" || return 1
-    
-    chmod 644 "$SSL_DIR/fullchain.pem"
-    chmod 600 "$SSL_DIR/privkey.pem"
-    
-    echo -e "${GREEN}✅ Self-Signed Zertifikat erstellt${NC}"
-    echo -e "${YELLOW}⚠️  Browser werden eine Sicherheitswarnung anzeigen${NC}"
-    return 0
-}
-
-check_manual_cert() {
-    echo -e "${BLUE}📋 Prüfe manuelle Zertifikat-Installation...${NC}"
-    
-    if [ ! -f "$SSL_DIR/fullchain.pem" ] || [ ! -f "$SSL_DIR/privkey.pem" ]; then
-        echo -e "${RED}❌ Manuelle Zertifikate nicht gefunden${NC}"
-        echo -e "${YELLOW}Bitte platziere deine Zertifikatsdateien:${NC}"
-        echo -e "${YELLOW}  - Vollständige Zertifikatskette: $SSL_DIR/fullchain.pem${NC}"
-        echo -e "${YELLOW}  - Private Key: $SSL_DIR/privkey.pem${NC}"
+        log_error "Cloudflare Zertifikat-Verzeichnis nicht gefunden"
         return 1
     fi
     
-    chmod 644 "$SSL_DIR/fullchain.pem"
-    chmod 600 "$SSL_DIR/privkey.pem"
-    
-    echo -e "${GREEN}✅ Manuelle Zertifikate gefunden und konfiguriert${NC}"
-    return 0
+    # Credentials aufräumen
+    rm -f "$creds_file"
 }
 
+# Manuelle Zertifikat-Validierung
+validate_manual_cert() {
+    log_info "Validiere manuelle Zertifikate..."
+    
+    local cert_file="$SSL_DIR/fullchain.pem"
+    local key_file="$SSL_DIR/privkey.pem"
+    
+    if [ ! -f "$cert_file" ] || [ ! -f "$key_file" ]; then
+        log_error "Manuelle Zertifikate nicht gefunden:"
+        log_error "  Benötigt: $cert_file"
+        log_error "  Benötigt: $key_file"
+        return 1
+    fi
+    
+    # Zertifikat validieren
+    if ! openssl x509 -in "$cert_file" -text -noout &> /dev/null; then
+        log_error "Ungültiges Zertifikat: $cert_file"
+        return 1
+    fi
+    
+    # Private Key validieren
+    if ! openssl rsa -in "$key_file" -check &> /dev/null; then
+        log_error "Ungültiger Private Key: $key_file"
+        return 1
+    fi
+    
+    # Zusammengehörigkeit prüfen
+    local cert_modulus=$(openssl x509 -noout -modulus -in "$cert_file" | openssl md5)
+    local key_modulus=$(openssl rsa -noout -modulus -in "$key_file" | openssl md5)
+    
+    if [ "$cert_modulus" != "$key_modulus" ]; then
+        log_error "Zertifikat und Private Key gehören nicht zusammen"
+        return 1
+    fi
+    
+    log_info "✅ Manuelle Zertifikate validiert"
+}
+
+# Dateiberechtigungen setzen
+set_file_permissions() {
+    log_info "Setze Dateiberechtigungen..."
+    
+    local cert_file="$SSL_DIR/fullchain.pem"
+    local key_file="$SSL_DIR/privkey.pem"
+    
+    if [ -f "$cert_file" ]; then
+        chmod 644 "$cert_file"
+        chown root:root "$cert_file" 2>/dev/null || true
+    fi
+    
+    if [ -f "$key_file" ]; then
+        chmod 600 "$key_file"
+        chown root:root "$key_file" 2>/dev/null || true
+    fi
+    
+    log_info "✅ Dateiberechtigungen gesetzt"
+}
+
+# Zertifikat-Informationen anzeigen
+display_cert_info() {
+    log_info "Zeige Zertifikat-Informationen..."
+    
+    local cert_file="$SSL_DIR/fullchain.pem"
+    
+    if [ -f "$cert_file" ]; then
+        echo -e "\n${GREEN}📋 Zertifikat-Informationen:${NC}"
+        echo "================================="
+        
+        # Grundinformationen
+        openssl x509 -in "$cert_file" -text -noout | grep -E "(Subject:|Issuer:|Not Before:|Not After:|DNS:|IP Address:)" | while read line; do
+            echo -e "${BLUE}$line${NC}"
+        done
+        
+        # Gültigkeitsprüfung
+        local expiry_date=$(openssl x509 -in "$cert_file" -enddate -noout | cut -d= -f2)
+        local days_until_expiry=$(( ($(date -d "$expiry_date" +%s) - $(date +%s)) / 86400 ))
+        
+        echo -e "\n${GREEN}⏰ Gültigkeit:${NC}"
+        echo "  Läuft ab: $expiry_date"
+        echo "  Verbleibende Tage: $days_until_expiry"
+        
+        if [ $days_until_expiry -le 30 ]; then
+            echo -e "  ${YELLOW}⚠️ Erneuerung empfohlen${NC}"
+        fi
+        
+        echo "================================="
+    fi
+}
+
+# Auto-Renewal Setup
 setup_auto_renewal() {
-    if [ "$AUTO_RENEWAL" != "true" ] || [ "$METHOD" = "selfsigned" ] || [ "$METHOD" = "manual" ]; then
-        echo -e "${BLUE}🔄 Auto-Renewal übersprungen für Methode: $METHOD${NC}"
-        return 0
-    fi
-    
-    echo -e "${BLUE}🔄 Richte Auto-Renewal ein...${NC}"
-    
-    # Renewal-Script erstellen
-    cat > "$SSL_DIR/renewal.sh" << 'RENEWAL_EOF'
+    if [ "$AUTO_RENEWAL" = "true" ] && [ "$METHOD" != "selfsigned" ] && [ "$METHOD" != "manual" ]; then
+        log_info "Richte Auto-Renewal ein..."
+        
+        # Renewal-Script erstellen
+        cat > "$SSL_DIR/renewal.sh" << EOF
 #!/bin/bash
-# Auto-Renewal Script für Database Backup Tool
+# Auto-Renewal Script für $DOMAIN
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$(dirname "$SCRIPT_DIR")"
+export SSL_DOMAIN="$DOMAIN"
+export SSL_EMAIL="$EMAIL"
+export SSL_METHOD="$METHOD"
+export SSL_AUTO_RENEWAL="$AUTO_RENEWAL"
+export SSL_KEY_SIZE="$KEY_SIZE"
+export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_TOKEN"
 
-echo "🔄 SSL Auto-Renewal läuft..."
-echo "Verzeichnis: $APP_DIR"
+cd "$SCRIPT_DIR"
+./ssl-setup.sh
 
-# Certbot Renewal
-if /usr/bin/certbot renew --quiet; then
-    echo "✅ Zertifikat erfolgreich erneuert"
-    
-    # Kopiere neue Zertifikate
-    if [ -d "/etc/letsencrypt/live/$SSL_DOMAIN" ]; then
-        cp "/etc/letsencrypt/live/$SSL_DOMAIN/fullchain.pem" "$SCRIPT_DIR/fullchain.pem"
-        cp "/etc/letsencrypt/live/$SSL_DOMAIN/privkey.pem" "$SCRIPT_DIR/privkey.pem"
-        chmod 644 "$SCRIPT_DIR/fullchain.pem"
-        chmod 600 "$SCRIPT_DIR/privkey.pem"
-        echo "✅ Neue Zertifikate kopiert"
-    fi
-    
-    # Restart Application (optional)
-    if pgrep -f "node.*server.js" > /dev/null; then
-        echo "🔄 Sende SIGHUP an Node.js Prozess..."
-        pkill -HUP -f "node.*server.js" || true
-    fi
-else
-    echo "❌ Zertifikat-Erneuerung fehlgeschlagen"
+# Neustart-Signal an Anwendung
+if pgrep -f "node.*server.js" > /dev/null; then
+    pkill -HUP -f "node.*server.js" || true
 fi
-RENEWAL_EOF
-    
-    chmod +x "$SSL_DIR/renewal.sh"
-    
-    # Cron-Job hinzufügen
-    CRON_FILE="/etc/cron.d/db-backup-ssl-renewal"
-    cat > "$CRON_FILE" << EOF
+EOF
+        
+        chmod +x "$SSL_DIR/renewal.sh"
+        
+        # Cron-Job erstellen
+        local cron_file="/etc/cron.d/ssl-renewal-db-backup"
+        cat > "$cron_file" << EOF
 # Auto-Renewal für DB Backup Tool SSL-Zertifikat
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-SSL_DOMAIN=$DOMAIN
 
 # Täglich um 2:00 Uhr prüfen und erneuern
-0 2 * * * root $SSL_DIR/renewal.sh >> /var/log/ssl-renewal.log 2>&1
+0 2 * * * root $SSL_DIR/renewal.sh >> $LOG_FILE 2>&1
 EOF
-    
-    echo -e "${GREEN}✅ Auto-Renewal konfiguriert (täglich um 2:00 Uhr)${NC}"
-}
-
-show_certificate_info() {
-    if [ -f "$SSL_DIR/fullchain.pem" ]; then
-        echo -e "${BLUE}🔍 Zertifikat-Informationen:${NC}"
-        echo "============================================="
-        openssl x509 -in "$SSL_DIR/fullchain.pem" -text -noout | grep -E "(Subject:|Issuer:|Not Before:|Not After:)" || true
-        echo "============================================="
+        
+        log_info "✅ Auto-Renewal konfiguriert"
+    else
+        log_info "Auto-Renewal übersprungen"
     fi
 }
 
-# Hauptlogik
+# Cleanup alte Dateien
+cleanup_old_files() {
+    log_info "Räume alte Dateien auf..."
+    
+    # Alte Backups (älter als 30 Tage)
+    find "$SSL_DIR" -name "backup-*" -type d -mtime +30 -exec rm -rf {} \; 2>/dev/null || true
+    
+    # Alte Log-Dateien rotieren
+    if [ -f "$LOG_FILE" ] && [ $(stat -c%s "$LOG_FILE") -gt 10485760 ]; then # 10MB
+        mv "$LOG_FILE" "$LOG_FILE.old"
+        touch "$LOG_FILE"
+        chmod 600 "$LOG_FILE"
+    fi
+    
+    log_info "✅ Cleanup abgeschlossen"
+}
+
+# Hauptfunktion
 main() {
+    log_info "Starte Enhanced SSL-Setup..."
+    
+    # Präparation
+    check_dependencies
+    prepare_ssl_directory
+    validate_domain
+    
+    # Zertifikat generieren
     case "$METHOD" in
-        "letsencrypt")
-            if create_letsencrypt_cert; then
-                setup_auto_renewal
-            else
-                echo -e "${YELLOW}⚠️  Let's Encrypt fehlgeschlagen, verwende Self-Signed Fallback${NC}"
-                create_selfsigned_cert
-            fi
-            ;;
-            
-        "cloudflare")
-            if create_cloudflare_cert; then
-                setup_auto_renewal
-            else
-                echo -e "${YELLOW}⚠️  Cloudflare fehlgeschlagen, verwende Self-Signed Fallback${NC}"
-                create_selfsigned_cert
-            fi
-            ;;
-            
         "selfsigned")
             create_selfsigned_cert
             ;;
-            
-        "manual")
-            if ! check_manual_cert; then
-                echo -e "${YELLOW}⚠️  Manuelle Zertifikate nicht gefunden, verwende Self-Signed Fallback${NC}"
-                create_selfsigned_cert
-            fi
+        "letsencrypt")
+            create_letsencrypt_cert
             ;;
-            
+        "cloudflare")
+            create_cloudflare_cert
+            ;;
+        "manual")
+            validate_manual_cert
+            ;;
         *)
-            echo -e "${RED}❌ Unbekannte SSL-Methode: $METHOD${NC}"
-            echo -e "${YELLOW}Verfügbare Methoden: letsencrypt, cloudflare, selfsigned, manual${NC}"
-            echo -e "${YELLOW}Verwende Self-Signed Fallback${NC}"
-            create_selfsigned_cert
+            log_error "Unbekannte SSL-Methode: $METHOD"
+            exit 1
             ;;
     esac
     
-    # Überprüfe ob Zertifikate erfolgreich erstellt wurden
-    if [ -f "$SSL_DIR/fullchain.pem" ] && [ -f "$SSL_DIR/privkey.pem" ]; then
-        show_certificate_info
-        echo -e "${GREEN}✅ SSL-Setup erfolgreich abgeschlossen!${NC}"
-        echo -e "${BLUE}📁 Zertifikate gespeichert in: $SSL_DIR${NC}"
-        echo -e "${BLUE}🚀 Starte den Server neu, um HTTPS zu aktivieren${NC}"
-        
-        # Konfiguration in config.json updaten
-        if [ -f "$APP_DIR/config.json" ]; then
-            echo -e "${BLUE}📝 Aktualisiere config.json...${NC}"
-            # Backup der Config
-            cp "$APP_DIR/config.json" "$APP_DIR/config.json.backup"
-            
-            # SSL-Konfiguration in config.json setzen (vereinfacht)
-            sed -i 's/"requireHttps": false/"requireHttps": true/' "$APP_DIR/config.json" 2>/dev/null || true
-        fi
-        
-        return 0
-    else
-        echo -e "${RED}❌ SSL-Setup fehlgeschlagen!${NC}"
-        return 1
-    fi
+    # Nachbearbeitung
+    set_file_permissions
+    display_cert_info
+    setup_auto_renewal
+    cleanup_old_files
+    
+    log_info "✅ Enhanced SSL-Setup erfolgreich abgeschlossen!"
 }
+
+# Fehlerbehandlung
+trap 'log_error "SSL-Setup fehlgeschlagen bei Zeile $LINENO"; exit 1' ERR
 
 # Script ausführen
 main "$@"
 
-echo ""
-echo -e "${GREEN}🔐 SSL-Setup beendet${NC}"
-echo -e "${BLUE}Zum Aktivieren von HTTPS:${NC}"
-echo -e "${BLUE}  1. Setze REQUIRE_HTTPS=true in den Umgebungsvariablen${NC}"
-echo -e "${BLUE}  2. Starte den Server neu${NC}"
-echo -e "${BLUE}  3. Verbinde dich über https://$DOMAIN:8443${NC}"
+echo -e "\n${GREEN}🎉 SSL-Setup erfolgreich abgeschlossen!${NC}"
+echo -e "${BLUE}Logs verfügbar unter: $LOG_FILE${NC}"
+echo -e "${BLUE}Zertifikate verfügbar unter: $SSL_DIR${NC}"
+
+if [ -d "$BACKUP_DIR" ]; then
+    echo -e "${BLUE}Backup der alten Zertifikate: $BACKUP_DIR${NC}"
+fi
