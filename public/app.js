@@ -335,6 +335,12 @@ function initializeEventListeners() {
       updatePasswordStrength(this.value);
     });
   }
+
+  // Manual Update Button
+  const manualUpdateButton = document.getElementById('manual-update-button');
+  if (manualUpdateButton) {
+    manualUpdateButton.addEventListener('click', manualUpdate);
+  }
 }
 
 // Alle API-Aufrufe mit credentials erweitern
