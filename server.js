@@ -969,7 +969,10 @@ class DatabaseBackupTool {
         },
         crossOriginEmbedderPolicy: false,
         crossOriginOpenerPolicy: false,
-        hsts: false,
+        hsts: {
+          maxAge: 0,
+          includeSubDomains: false
+        },
         noSniff: true,
         frameguard: { action: 'deny' },
         xssFilter: true,
