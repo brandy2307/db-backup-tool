@@ -21,6 +21,9 @@ const svgCaptcha = require("svg-captcha");
 const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
 
+// ====== SSL-MANAGEMENT IMPORT ======
+const SSLCertificateManager = require('./ssl-management.js');
+
 class DatabaseBackupTool {
   constructor() {
     this.app = express();
@@ -50,6 +53,9 @@ class DatabaseBackupTool {
     );
     this.encryptionKey = this.config.security.jwtSecret;
 
+    // ====== SSL CERTIFICATE MANAGER ======
+    this.sslManager = new SSLCertificateManager(this.config);
+
     // ====== NEUE SICHERHEITS-FEATURES ======
     this.captchaSessions = new Map(); // CAPTCHA Sessions verwalten
     this.failedAttempts = new Map(); // Fehlgeschlagene Login-Versuche
@@ -67,7 +73,7 @@ class DatabaseBackupTool {
       strongPasswords: this.config.security.strongPasswords !== false,
     };
 
-    console.log("🛡️ [SECURITY] Initialisiere Sicherheits-Features:");
+    console.log("🛡️ [SECURITY] Initialisiere Enhanced Security Features:");
     console.log(`   Max Login-Versuche: ${this.securityConfig.maxFailedAttempts}`);
     console.log(`   CAPTCHA nach: ${this.securityConfig.captchaThreshold} Fehlversuchen`);
     console.log(`   Session Timeout: ${this.securityConfig.sessionTimeout / 1000 / 60} Minuten`);
@@ -146,6 +152,24 @@ class DatabaseBackupTool {
         config.server.httpsPort = parseInt(process.env.HTTPS_PORT);
       }
 
+      // ====== SSL-KONFIGURATION ======
+      if (process.env.SSL_DOMAIN) {
+        config.ssl = config.ssl || {};
+        config.ssl.domain = process.env.SSL_DOMAIN;
+      }
+      if (process.env.SSL_EMAIL) {
+        config.ssl = config.ssl || {};
+        config.ssl.email = process.env.SSL_EMAIL;
+      }
+      if (process.env.SSL_METHOD) {
+        config.ssl = config.ssl || {};
+        config.ssl.method = process.env.SSL_METHOD;
+      }
+      if (process.env.SSL_AUTO_RENEWAL) {
+        config.ssl = config.ssl || {};
+        config.ssl.autoRenewal = process.env.SSL_AUTO_RENEWAL === "true";
+      }
+
       // Token-Behandlung
       if (process.env.GIT_BACKUP_TOKEN) {
         config.gitBackup = config.gitBackup || {};
@@ -167,8 +191,6 @@ class DatabaseBackupTool {
     }
   }
   // ====== NEUE SICHERHEITS-METHODEN ======
-
-  // SSL Certificate Management
 
   // Password Validation
   validatePasswordStrength(password) {
@@ -446,6 +468,85 @@ class DatabaseBackupTool {
     
     if (cleaned > 0) {
       console.log(`🧹 [SESSION] ${cleaned} abgelaufene Sessions bereinigt`);
+    }
+  }
+
+  // ====== SSL-INITIALISIERUNG ======
+  async initializeSSL() {
+    console.log("🔐 [SSL] Initialisiere SSL-Zertifikat-Management...");
+    
+    try {
+      // Konfiguration validieren
+      const configValidation = this.sslManager.validateConfiguration();
+      if (!configValidation.valid) {
+        console.warn("⚠️ [SSL] Konfigurationsprobleme gefunden:");
+        configValidation.issues.forEach(issue => {
+          console.warn(`   - ${issue}`);
+        });
+      }
+
+      // Zertifikate prüfen
+      const certCheck = await this.sslManager.checkCertificates();
+      console.log(`🔍 [SSL] Zertifikat-Status: ${certCheck.valid ? 'Gültig' : 'Ungültig'}`);
+      
+      if (!certCheck.valid) {
+        console.log(`📝 [SSL] Grund: ${certCheck.reason}`);
+        console.log("🔄 [SSL] Hole neues SSL-Zertifikat...");
+        
+        const result = await this.sslManager.obtainCertificate();
+        console.log("✅ [SSL] Zertifikat erfolgreich erhalten:");
+        console.log(`   Domain: ${result.domain}`);
+        console.log(`   Methode: ${result.method}`);
+        console.log(`   Läuft ab in: ${result.expiresIn} Tagen`);
+        
+        if (result.warnings) {
+          console.warn("⚠️ [SSL] Warnungen:", result.warnings);
+        }
+      } else if (certCheck.needsRenewal) {
+        console.log("🔄 [SSL] Zertifikat muss erneuert werden...");
+        try {
+          await this.sslManager.obtainCertificate();
+          console.log("✅ [SSL] Zertifikat erfolgreich erneuert");
+        } catch (renewError) {
+          console.warn("⚠️ [SSL] Zertifikat-Erneuerung fehlgeschlagen:", renewError.message);
+        }
+      }
+
+      // Finale Statusprüfung
+      const finalStatus = await this.sslManager.getStatus();
+      console.log("🔐 [SSL] Finaler Status:", finalStatus.enabled ? "Aktiv" : "Inaktiv");
+      
+      if (finalStatus.enabled) {
+        console.log(`   Domain: ${finalStatus.domain}`);
+        console.log(`   Methode: ${finalStatus.method}`);
+        console.log(`   Läuft ab in: ${finalStatus.expiresIn} Tagen`);
+        console.log(`   Auto-Renewal: ${finalStatus.autoRenewal ? 'Aktiviert' : 'Deaktiviert'}`);
+      } else {
+        console.warn(`   Grund: ${finalStatus.reason}`);
+        if (finalStatus.error) {
+          console.error(`   Fehler: ${finalStatus.error}`);
+        }
+      }
+
+    } catch (error) {
+      console.error("❌ [SSL] SSL-Initialisierung fehlgeschlagen:", error.message);
+      
+      // Fallback zu Self-Signed
+      if (this.sslManager.method !== 'selfsigned') {
+        console.log("🔧 [SSL] Versuche Self-Signed Zertifikat als Fallback...");
+        try {
+          const originalMethod = this.sslManager.method;
+          this.sslManager.method = 'selfsigned';
+          await this.sslManager.obtainCertificate();
+          console.log("✅ [SSL] Self-Signed Fallback erfolgreich");
+          this.sslManager.method = originalMethod; // Restore original method
+        } catch (fallbackError) {
+          console.error("❌ [SSL] Auch Self-Signed Fallback fehlgeschlagen:", fallbackError.message);
+          throw new Error("SSL-Initialisierung komplett fehlgeschlagen");
+        }
+      } else {
+        throw error;
+      }
     }
   }
   // ====== TOKEN-VERSCHLÜSSELUNG UND GIT-METHODEN ======
@@ -1248,7 +1349,7 @@ class DatabaseBackupTool {
   displaySecurityStatus() {
     console.log("");
     console.log("🛡️ ================================================");
-    console.log("🛡️ SECURITY STATUS - ENHANCED VERSION");
+    console.log("🛡️ SECURITY STATUS - ENHANCED SSL VERSION");
     console.log("🛡️ ================================================");
     console.log(`🔐 HTTPS: ${this.securityConfig.requireHttps ? "✅ Aktiviert" : "❌ Deaktiviert"}`);
     console.log(`🔑 2FA: ${this.securityConfig.enable2FA ? "✅ Aktiviert" : "❌ Deaktiviert"}`);
@@ -1261,6 +1362,13 @@ class DatabaseBackupTool {
     console.log(`📊 Rate Limiting: ✅ Aktiviert (Auth: ${this.securityConfig.maxFailedAttempts}/15min, API: 100/15min)`);
     console.log(`🍪 Secure Cookies: ${this.securityConfig.requireHttps ? "✅ Aktiviert" : "⚠️ Nur HTTP"}`);
     console.log(`🧹 Session Cleanup: ✅ Aktiviert (alle 5 Minuten)`);
+    
+    if (this.securityConfig.requireHttps) {
+      console.log(`🔐 SSL Domain: ${this.sslManager.domain}`);
+      console.log(`🔑 SSL Methode: ${this.sslManager.method}`);
+      console.log(`🔄 SSL Auto-Renewal: ${this.sslManager.autoRenewal ? "✅ Aktiviert" : "❌ Deaktiviert"}`);
+    }
+    
     console.log("================================================");
     console.log("");
   }
@@ -1914,6 +2022,100 @@ class DatabaseBackupTool {
       throw error;
     }
   }
+  // ====== SSL API-ROUTEN ======
+  setupSSLRoutes() {
+    // SSL Status
+    this.app.get("/api/ssl-status", this.authMiddleware.bind(this), async (req, res) => {
+      try {
+        const status = await this.sslManager.getStatus();
+        res.json(status);
+      } catch (error) {
+        res.status(500).json({ error: "SSL Status konnte nicht abgerufen werden: " + error.message });
+      }
+    });
+
+    // SSL Renewal
+    this.app.post("/api/ssl-renew", this.authMiddleware.bind(this), async (req, res) => {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin-Berechtigung erforderlich" });
+      }
+
+      try {
+        console.log(`🔄 [SSL] Manuelle Erneuerung durch: ${req.user.username}`);
+        const result = await this.sslManager.obtainCertificate();
+        
+        res.json({ 
+          message: "SSL-Zertifikat erfolgreich erneuert",
+          domain: result.domain,
+          method: result.method,
+          expiresIn: result.expiresIn
+        });
+      } catch (error) {
+        console.error("❌ [SSL] Manuelle Erneuerung fehlgeschlagen:", error.message);
+        res.status(500).json({ error: "SSL-Erneuerung fehlgeschlagen: " + error.message });
+      }
+    });
+
+    // SSL Health Check
+    this.app.get("/api/ssl-health", this.authMiddleware.bind(this), async (req, res) => {
+      try {
+        const health = await this.sslManager.performHealthCheck();
+        res.json(health);
+      } catch (error) {
+        res.status(500).json({ error: "SSL Health Check fehlgeschlagen: " + error.message });
+      }
+    });
+
+    // SSL Configuration
+    this.app.get("/api/ssl-config", this.authMiddleware.bind(this), (req, res) => {
+      try {
+        const config = this.sslManager.getConfigurationSummary();
+        res.json(config);
+      } catch (error) {
+        res.status(500).json({ error: "SSL Konfiguration konnte nicht abgerufen werden: " + error.message });
+      }
+    });
+
+    // SSL Setup Instructions
+    this.app.get("/api/ssl-instructions", this.authMiddleware.bind(this), (req, res) => {
+      try {
+        const instructions = this.sslManager.generateSetupInstructions();
+        res.json(instructions);
+      } catch (error) {
+        res.status(500).json({ error: "SSL Setup-Anweisungen konnten nicht generiert werden: " + error.message });
+      }
+    });
+
+    // SSL Certificate Test
+    this.app.post("/api/ssl-test", this.authMiddleware.bind(this), async (req, res) => {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin-Berechtigung erforderlich" });
+      }
+
+      try {
+        const port = req.body.port || 8443;
+        const result = await this.sslManager.testCertificate(port);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: "SSL Test fehlgeschlagen: " + error.message });
+      }
+    });
+
+    // SSL Export Configuration (für Troubleshooting)
+    this.app.get("/api/ssl-export", this.authMiddleware.bind(this), async (req, res) => {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin-Berechtigung erforderlich" });
+      }
+
+      try {
+        const exportData = await this.sslManager.exportConfiguration();
+        res.json(exportData);
+      } catch (error) {
+        res.status(500).json({ error: "SSL Export fehlgeschlagen: " + error.message });
+      }
+    });
+  }
+
   setupRoutes() {
     // ====== NEUE SICHERHEITS-ROUTEN ======
 
@@ -2356,7 +2558,7 @@ class DatabaseBackupTool {
       }
     });
 
-    // ====== WEITERE ROUTEN (gekürzt für Länge) ======
+    // ====== WEITERE SICHERHEITS-ROUTEN ======
     this.app.get("/api/security-info", this.authMiddleware.bind(this), (req, res) => {
       const { username } = req.user;
       const user = this.users.get(username);
@@ -2424,6 +2626,9 @@ class DatabaseBackupTool {
       
       res.json({ message: "Session erfolgreich beendet" });
     });
+
+    // ====== SSL-ROUTEN EINBINDEN ======
+    this.setupSSLRoutes();
 
     // ====== BACKUP UND SYSTEM ROUTEN ======
     this.app.post("/api/update", this.authMiddleware.bind(this), async (req, res) => {
@@ -2555,67 +2760,237 @@ class DatabaseBackupTool {
       });
     });
   }
-
-  // ====== SERVER-START-METHODE ======
+  // ====== SERVER-START-METHODEN ======
   startServer() {
     const port = this.config.server.port;
     const httpsPort = this.config.server.httpsPort || 8443;
     const host = this.config.server.host;
 
     if (this.securityConfig.requireHttps) {
-      
-      const keyPath = path.join(this.sslCertPath, "privkey.pem");
-      const certPath = path.join(this.sslCertPath, "fullchain.pem");
+      const keyPath = this.sslManager.keyPath;
+      const certPath = this.sslManager.certPath;
 
       if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-        const httpsOptions = {
-          key: fs.readFileSync(keyPath),
-          cert: fs.readFileSync(certPath)
-        };
+        try {
+          const httpsOptions = {
+            key: fs.readFileSync(keyPath),
+            cert: fs.readFileSync(certPath),
+            // Erweiterte HTTPS-Optionen
+            secureProtocol: 'TLSv1_2_method',
+            honorCipherOrder: true,
+            ciphers: [
+              'ECDHE-RSA-AES128-GCM-SHA256',
+              'ECDHE-RSA-AES256-GCM-SHA384',
+              'ECDHE-RSA-AES128-SHA256',
+              'ECDHE-RSA-AES256-SHA384'
+            ].join(':')
+          };
 
-        https.createServer(httpsOptions, this.app).listen(httpsPort, host, () => {
-          console.log(`🔐 HTTPS Server läuft auf https://${host}:${httpsPort}`);
-        });
+          const httpsServer = https.createServer(httpsOptions, this.app);
+          
+          httpsServer.listen(httpsPort, host, () => {
+            console.log(`🔐 HTTPS Server läuft auf https://${host}:${httpsPort}`);
+          });
 
-        const redirectApp = express();
-        redirectApp.use((req, res) => {
-          res.redirect(301, `https://${req.headers.host.replace(/:\d+$/, `:${httpsPort}`)}${req.url}`);
-        });
+          // HTTP to HTTPS redirect
+          const redirectApp = express();
+          redirectApp.use((req, res) => {
+            const redirectUrl = `https://${req.headers.host.replace(/:\d+$/, `:${httpsPort}`)}${req.url}`;
+            res.redirect(301, redirectUrl);
+          });
 
-        http.createServer(redirectApp).listen(port, host, () => {
-          console.log(`🔄 HTTP Redirect Server läuft auf http://${host}:${port} -> HTTPS`);
-        });
+          const httpServer = http.createServer(redirectApp);
+          httpServer.listen(port, host, () => {
+            console.log(`🔄 HTTP Redirect Server läuft auf http://${host}:${port} -> HTTPS`);
+          });
+
+          // SSL certificate monitoring
+          this.startSSLMonitoring();
+          
+          // Graceful shutdown für HTTPS
+          process.on('SIGTERM', () => {
+            console.log('🔄 [SSL] Graceful HTTPS shutdown...');
+            httpsServer.close(() => {
+              console.log('✅ [SSL] HTTPS Server geschlossen');
+            });
+            httpServer.close(() => {
+              console.log('✅ [SSL] HTTP Redirect Server geschlossen');
+            });
+          });
+          
+        } catch (error) {
+          console.error("❌ [SSL] HTTPS Server konnte nicht gestartet werden:", error.message);
+          console.log("🔧 [SSL] Starte HTTP Server als Fallback...");
+          this.startHTTPServer(port, host);
+        }
       } else {
         console.warn("⚠️ [SSL] Zertifikate nicht gefunden, starte HTTP Server");
-        this.app.listen(port, host, () => {
-          console.log(`🌐 HTTP Server läuft auf http://${host}:${port}`);
-        });
+        this.startHTTPServer(port, host);
       }
     } else {
-      this.app.listen(port, host, () => {
-        console.log(`🌐 HTTP Server läuft auf http://${host}:${port}`);
-      });
+      this.startHTTPServer(port, host);
     }
 
     this.displayStartupInfo();
   }
 
+  startHTTPServer(port, host) {
+    const httpServer = this.app.listen(port, host, () => {
+      console.log(`🌐 HTTP Server läuft auf http://${host}:${port}`);
+    });
+
+    // Graceful shutdown für HTTP
+    process.on('SIGTERM', () => {
+      console.log('🔄 [HTTP] Graceful shutdown...');
+      httpServer.close(() => {
+        console.log('✅ [HTTP] Server geschlossen');
+      });
+    });
+  }
+
+  /**
+   * Start SSL certificate monitoring
+   */
+  startSSLMonitoring() {
+    console.log("🔍 [SSL] Starte SSL-Zertifikat-Überwachung...");
+    
+    // Check certificates every 6 hours
+    setInterval(async () => {
+      try {
+        const certCheck = await this.sslManager.checkCertificates();
+        
+        if (certCheck.needsRenewal) {
+          console.log("🔄 [SSL] Zertifikat muss erneuert werden...");
+          await this.sslManager.obtainCertificate();
+          
+          // In production, you might want to implement graceful restart
+          console.log("⚠️ [SSL] Neustart erforderlich für neue Zertifikate");
+        }
+        
+        if (certCheck.expiresIn <= 7) {
+          console.warn(`⚠️ [SSL] Zertifikat läuft in ${certCheck.expiresIn} Tagen ab!`);
+        }
+      } catch (error) {
+        console.error("❌ [SSL] Fehler bei der Zertifikat-Überwachung:", error.message);
+      }
+    }, 6 * 60 * 60 * 1000); // 6 hours
+  }
+
+  // ====== STARTUP-ANZEIGE ======
   displayStartupInfo() {
     console.log("");
     console.log("🚀 =====================================================");
-    console.log("🚀 SECURE DATABASE BACKUP TOOL - ENHANCED VERSION");
+    console.log("🚀 SECURE DATABASE BACKUP TOOL - SSL EDITION");
     console.log("🚀 =====================================================");
     console.log("📡 Server läuft auf " + this.config.server.host + ":" + this.config.server.port);
+    
     if (this.securityConfig.requireHttps) {
       console.log("🔐 HTTPS Server: " + this.config.server.host + ":" + (this.config.server.httpsPort || 8443));
+      console.log("🔒 SSL Domain: " + this.sslManager.domain);
+      console.log("🔑 SSL Methode: " + this.sslManager.method);
+      
+      // SSL-Status anzeigen
+      this.displaySSLStatus();
     }
+    
     console.log("🔐 Standard Login: " + this.config.security.defaultAdmin.username + " / " + this.config.security.defaultAdmin.password);
     console.log("📁 Backup-Verzeichnis: " + this.config.backup.defaultPath);
     console.log("");
     this.displaySecurityStatus();
-    console.log("🎉 Ready for Secure Database Backups! 🎉");
+    console.log("🎉 Ready for Secure Database Backups with SSL! 🎉");
   }
 
+  async displaySSLStatus() {
+    try {
+      const status = await this.sslManager.getStatus();
+      
+      console.log("🔐 ===============================================");
+      console.log("🔐 SSL CERTIFICATE STATUS");
+      console.log("🔐 ===============================================");
+      console.log(`🔒 SSL aktiviert: ${status.enabled ? "✅ Ja" : "❌ Nein"}`);
+      
+      if (status.enabled) {
+        console.log(`🌐 Domain: ${status.domain}`);
+        console.log(`🔑 Methode: ${status.method}`);
+        console.log(`📅 Läuft ab in: ${status.expiresIn} Tagen`);
+        console.log(`📋 Aussteller: ${status.issuer}`);
+        console.log(`🔄 Auto-Renewal: ${status.autoRenewal ? "✅ Aktiviert" : "❌ Deaktiviert"}`);
+        
+        if (status.needsRenewal) {
+          console.log(`⚠️ Erneuerung erforderlich: Ja`);
+        }
+        
+        if (status.method === 'selfsigned') {
+          console.log(`⚠️ Self-Signed: Browser zeigen Sicherheitswarnung`);
+        }
+
+        // Zusätzliche SSL-Informationen
+        if (status.alternativeNames && status.alternativeNames.length > 0) {
+          console.log(`📝 Alternative Names: ${status.alternativeNames.join(', ')}`);
+        }
+        
+        if (status.issueDate) {
+          console.log(`📅 Ausgestellt am: ${new Date(status.issueDate).toLocaleDateString('de-DE')}`);
+        }
+      } else {
+        console.log(`❌ Grund: ${status.reason}`);
+        if (status.error) {
+          console.log(`❌ Fehler: ${status.error}`);
+        }
+      }
+      
+      console.log("===============================================");
+    } catch (error) {
+      console.error("❌ [SSL] Fehler beim Anzeigen des SSL-Status:", error.message);
+    }
+  }
+
+  displayStartupInstructions() {
+    console.log("");
+    console.log("🔧 ================================================");
+    console.log("🔧 SSL SETUP ANWEISUNGEN");
+    console.log("🔧 ================================================");
+    
+    if (this.securityConfig.requireHttps) {
+      console.log("✅ HTTPS ist aktiviert!");
+      console.log("");
+      console.log("🌐 Verbindung:");
+      console.log(`   https://${this.sslManager.domain}:${this.config.server.httpsPort || 8443}`);
+      console.log("");
+      
+      if (this.sslManager.method === 'selfsigned') {
+        console.log("⚠️ Self-Signed Zertifikat:");
+        console.log("   - Browser zeigen Sicherheitswarnung");
+        console.log("   - Klicke auf 'Erweitert' → 'Trotzdem fortfahren'");
+        console.log("   - Für Production: Verwende Let's Encrypt oder Cloudflare");
+        console.log("");
+      }
+    } else {
+      console.log("⚠️ HTTPS ist deaktiviert!");
+      console.log("");
+      console.log("🔐 Für SSL-Aktivierung:");
+      console.log("   1. Setze REQUIRE_HTTPS=true");
+      console.log("   2. Konfiguriere SSL-Umgebungsvariablen:");
+      console.log("      - SSL_DOMAIN=deine-domain.com");
+      console.log("      - SSL_EMAIL=admin@deine-domain.com");
+      console.log("      - SSL_METHOD=letsencrypt");
+      console.log("   3. Starte Server neu");
+      console.log("");
+    }
+    
+    console.log("📋 Verfügbare SSL-Methoden:");
+    console.log("   - letsencrypt: Kostenlose Zertifikate (empfohlen)");
+    console.log("   - cloudflare: Cloudflare Origin Certificates");
+    console.log("   - selfsigned: Nur für Tests");
+    console.log("   - manual: Eigene Zertifikate");
+    console.log("");
+    console.log("🔧 SSL-Setup Script:");
+    console.log("   ./ssl-setup.sh");
+    console.log("");
+    console.log("================================================");
+  }
+
+  // ====== SICHERHEITS-CLEANUP-TASKS ======
   startSecurityCleanupTasks() {
     console.log("🧹 [SECURITY] Starte Sicherheits-Cleanup-Tasks...");
     
@@ -2676,56 +3051,92 @@ class DatabaseBackupTool {
     console.log("✅ [SECURITY] Sicherheits-Cleanup-Tasks gestartet");
   }
 
-  // ====== INIT-METHODE MIT SICHERHEITS-INITIALISIERUNG ======
+  // ====== ERROR-HANDLER ======
+  handleSSLErrors() {
+    // SSL-spezifische Error-Handler
+    process.on('uncaughtException', (error) => {
+      if (error.message.includes('SSL') || error.message.includes('TLS')) {
+        console.error("❌ [SSL] SSL-bezogener Fehler:", error.message);
+        console.error("🔧 [SSL] Prüfe SSL-Konfiguration und Zertifikate");
+      }
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      if (reason && reason.toString().includes('SSL')) {
+        console.error("❌ [SSL] SSL-bezogene Promise Rejection:", reason);
+        console.error("🔧 [SSL] Prüfe SSL-Setup und Zertifikat-Gültigkeit");
+      }
+    });
+  }
+
+  // ====== HAUPTINITIALISIERUNG ======
   async init() {
     console.log("🛡️ [INIT] Initialisiere Enhanced Security Features...");
     
+    // SSL Error-Handler registrieren
+    this.handleSSLErrors();
+    
     try {
-        console.log("[INIT STEP 1/8] Lade Konfiguration...");
+        console.log("[INIT STEP 1/9] Lade Konfiguration...");
         // Config is already loaded in constructor
-        console.log("[INIT STEP 1/8] Konfiguration geladen.");
+        console.log("[INIT STEP 1/9] Konfiguration geladen.");
 
         if (this.config.updates && this.config.updates.autoUpdate) {
-            console.log("[INIT STEP 2/8] Prüfe auf Updates...");
+            console.log("[INIT STEP 2/9] Prüfe auf Updates...");
             await this.checkForUpdates();
-            console.log("[INIT STEP 2/8] Update-Prüfung abgeschlossen.");
+            console.log("[INIT STEP 2/9] Update-Prüfung abgeschlossen.");
         } else {
-            console.log("[INIT STEP 2/8] Auto-Update übersprungen.");
+            console.log("[INIT STEP 2/9] Auto-Update übersprungen.");
         }
 
-        console.log("[INIT STEP 3/8] Setup Middleware...");
+        // SSL-Initialisierung VOR Middleware-Setup
+        if (this.securityConfig.requireHttps) {
+            console.log("[INIT STEP 3/9] Initialisiere SSL...");
+            await this.initializeSSL();
+            console.log("[INIT STEP 3/9] SSL initialisiert.");
+        } else {
+            console.log("[INIT STEP 3/9] SSL übersprungen.");
+        }
+
+        console.log("[INIT STEP 4/9] Setup Middleware...");
         this.setupMiddleware();
-        console.log("[INIT STEP 3/8] Middleware eingerichtet.");
+        console.log("[INIT STEP 4/9] Middleware eingerichtet.");
 
-        console.log("[INIT STEP 4/8] Setup Routes...");
+        console.log("[INIT STEP 5/9] Setup Routes...");
         this.setupRoutes();
-        console.log("[INIT STEP 4/8] Routes eingerichtet.");
+        console.log("[INIT STEP 5/9] Routes eingerichtet.");
 
-        console.log("[INIT STEP 5/8] Setup Default User...");
+        console.log("[INIT STEP 6/9] Setup Default User...");
         await this.setupDefaultUser();
-        console.log("[INIT STEP 5/8] Default User eingerichtet.");
+        console.log("[INIT STEP 6/9] Default User eingerichtet.");
 
-        console.log("[INIT STEP 6/8] Stelle Verzeichnisse sicher...");
+        console.log("[INIT STEP 7/9] Stelle Verzeichnisse sicher...");
         this.ensureDirectories();
-        console.log("[INIT STEP 6/8] Verzeichnisse sichergestellt.");
+        console.log("[INIT STEP 7/9] Verzeichnisse sichergestellt.");
 
-        console.log("[INIT STEP 7/8] Lade Git Token...");
+        console.log("[INIT STEP 8/9] Lade Git Token...");
         const savedToken = this.loadGitToken();
         if (savedToken && this.config.gitBackup) {
             this.config.gitBackup.token = savedToken;
-            console.log(`✅ [INIT] Git Token aus .git-secrets.enc geladen (${savedToken.length} Zeichen)`);
+            console.log(`✅ [INIT] Git Token geladen (${savedToken.length} Zeichen)`);
         } else {
             console.warn("⚠️ [INIT] Kein gültiger Git Token beim Start geladen");
         }
-        console.log("[INIT STEP 7/8] Git Token geladen.");
+        console.log("[INIT STEP 8/9] Git Token geladen.");
 
-        console.log("[INIT STEP 8/8] Initialisiere Git Backup & Zeitpläne...");
+        console.log("[INIT STEP 9/9] Initialisiere Git Backup & Zeitpläne...");
         await this.initializeGitBackup();
         this.loadSchedulesFromFile();
         this.startSecurityCleanupTasks();
-        console.log("[INIT STEP 8/8] Git Backup & Zeitpläne initialisiert.");
+        console.log("[INIT STEP 9/9] Git Backup & Zeitpläne initialisiert.");
+
+        // SSL-Monitoring starten
+        if (this.securityConfig.requireHttps && this.sslManager) {
+            this.sslManager.monitorCertificates();
+        }
 
         this.startServer();
+        this.displayStartupInstructions();
 
     } catch (error) {
         console.error("❌ [FATAL INIT ERROR] Kritischer Fehler während der Initialisierung:", error);
@@ -2759,7 +3170,7 @@ process.on("SIGINT", () => {
 });
 
 process.on("uncaughtException", (error) => {
-  console.error("❌ UNCAUGHT EXCEPTION (SECURITY VERSION):");
+  console.error("❌ UNCAUGHT EXCEPTION (SSL SECURITY VERSION):");
   console.error(`   Error: ${error.message}`);
   console.error(`   Stack: ${error.stack}`);
   
@@ -2772,13 +3183,16 @@ process.on("uncaughtException", (error) => {
   if (error.message.includes("captcha") || error.message.includes("2fa")) {
     console.error("   → Sicherheits-Feature-Fehler erkannt");
   }
+  if (error.message.includes("ssl") || error.message.includes("tls")) {
+    console.error("   → SSL/TLS-Fehler erkannt");
+  }
   
   console.log("🔄 Versuche secure graceful shutdown...");
   process.exit(1);
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ UNHANDLED PROMISE REJECTION (SECURITY VERSION):");
+  console.error("❌ UNHANDLED PROMISE REJECTION (SSL SECURITY VERSION):");
   console.error(`   Reason: ${reason}`);
   console.error(`   Promise: ${promise}`);
   
@@ -2787,6 +3201,9 @@ process.on("unhandledRejection", (reason, promise) => {
   }
   if (reason && reason.toString().includes("git")) {
     console.error("   → Git-Problem erkannt");
+  }
+  if (reason && reason.toString().includes("ssl")) {
+    console.error("   → SSL-Problem erkannt");
   }
   
   console.log("⚠️  Secure Anwendung läuft weiter, aber dies sollte behoben werden!");
@@ -2797,15 +3214,17 @@ console.log("");
 console.log("🛡️ ===============================================");
 console.log("🛡️ INITIALISIERE SECURE DATABASE BACKUP TOOL");
 console.log("🛡️ ===============================================");
-console.log("📦 Version: Enhanced Security Edition");
+console.log("📦 Version: Enhanced Security + SSL Edition");
 console.log("🔐 Features: HTTPS + 2FA + CAPTCHA + Sessions + Rate Limiting");
 console.log("🛡️ Security Headers: CSP + HSTS + XSS Protection");
 console.log("🔒 Passwort-Verschlüsselung: bcrypt (12 Rounds)");
 console.log("🚫 Brute-Force-Schutz: Account-Sperrung + CAPTCHA");
 console.log("🍪 Session Management: Secure + IP-Validation");
 console.log("📊 Erweiterte Protokollierung: Sicherheits-Events");
+console.log("🔐 SSL-Management: Let's Encrypt + Cloudflare + Manual");
+console.log("🔄 Auto-Renewal: Zertifikat-Überwachung + Erneuerung");
 console.log("===============================================");
 console.log("");
 
-// Start the secure application
+// Start the secure SSL application
 new DatabaseBackupTool();
