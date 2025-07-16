@@ -2718,28 +2718,57 @@ class DatabaseBackupTool {
   async init() {
     console.log("🛡️ [INIT] Initialisiere Enhanced Security Features...");
     
-    if (this.config.updates && this.config.updates.autoUpdate) {
-      console.log("🔄 Auto-Update ist aktiviert, prüfe auf Updates...");
-      await this.checkForUpdates();
+    try {
+        console.log("[INIT STEP 1/8] Lade Konfiguration...");
+        // Config is already loaded in constructor
+        console.log("[INIT STEP 1/8] Konfiguration geladen.");
+
+        if (this.config.updates && this.config.updates.autoUpdate) {
+            console.log("[INIT STEP 2/8] Prüfe auf Updates...");
+            await this.checkForUpdates();
+            console.log("[INIT STEP 2/8] Update-Prüfung abgeschlossen.");
+        } else {
+            console.log("[INIT STEP 2/8] Auto-Update übersprungen.");
+        }
+
+        console.log("[INIT STEP 3/8] Setup Middleware...");
+        this.setupMiddleware();
+        console.log("[INIT STEP 3/8] Middleware eingerichtet.");
+
+        console.log("[INIT STEP 4/8] Setup Routes...");
+        this.setupRoutes();
+        console.log("[INIT STEP 4/8] Routes eingerichtet.");
+
+        console.log("[INIT STEP 5/8] Setup Default User...");
+        await this.setupDefaultUser();
+        console.log("[INIT STEP 5/8] Default User eingerichtet.");
+
+        console.log("[INIT STEP 6/8] Stelle Verzeichnisse sicher...");
+        this.ensureDirectories();
+        console.log("[INIT STEP 6/8] Verzeichnisse sichergestellt.");
+
+        console.log("[INIT STEP 7/8] Lade Git Token...");
+        const savedToken = this.loadGitToken();
+        if (savedToken && this.config.gitBackup) {
+            this.config.gitBackup.token = savedToken;
+            console.log(`✅ [INIT] Git Token aus .git-secrets.enc geladen (${savedToken.length} Zeichen)`);
+        } else {
+            console.warn("⚠️ [INIT] Kein gültiger Git Token beim Start geladen");
+        }
+        console.log("[INIT STEP 7/8] Git Token geladen.");
+
+        console.log("[INIT STEP 8/8] Initialisiere Git Backup & Zeitpläne...");
+        await this.initializeGitBackup();
+        this.loadSchedulesFromFile();
+        this.startSecurityCleanupTasks();
+        console.log("[INIT STEP 8/8] Git Backup & Zeitpläne initialisiert.");
+
+        this.startServer();
+
+    } catch (error) {
+        console.error("❌ [FATAL INIT ERROR] Kritischer Fehler während der Initialisierung:", error);
+        process.exit(1);
     }
-
-    this.setupMiddleware();
-    this.setupRoutes();
-    await this.setupDefaultUser();
-    this.ensureDirectories();
-
-    const savedToken = this.loadGitToken();
-    if (savedToken && this.config.gitBackup) {
-      this.config.gitBackup.token = savedToken;
-      console.log(`✅ [INIT] Git Token aus .git-secrets.enc geladen (${savedToken.length} Zeichen)`);
-    } else {
-      console.warn("⚠️ [INIT] Kein gültiger Git Token beim Start geladen");
-    }
-
-    await this.initializeGitBackup();
-    this.loadSchedulesFromFile();
-    this.startSecurityCleanupTasks();
-    this.startServer();
   }
 }
 
