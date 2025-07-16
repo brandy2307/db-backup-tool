@@ -169,41 +169,6 @@ class DatabaseBackupTool {
   // ====== NEUE SICHERHEITS-METHODEN ======
 
   // SSL Certificate Management
-  generateSelfSignedCert() {
-    try {
-      if (!fs.existsSync(this.sslCertPath)) {
-        fs.mkdirSync(this.sslCertPath, { recursive: true });
-      }
-
-      const keyPath = path.join(this.sslCertPath, "private.key");
-      const certPath = path.join(this.sslCertPath, "certificate.crt");
-
-      if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-        console.log("🔐 [SSL] Generiere selbstsignierte SSL-Zertifikate (synchron)...");
-        
-        const keyCommand = `openssl genrsa -out "${keyPath}" 2048`;
-        const certCommand = `openssl req -new -x509 -key "${keyPath}" -out "${certPath}" -days 365 -subj "/C=DE/ST=NRW/L=Sprockhovel/O=DB Backup Tool/CN=localhost"`;
-        
-        try {
-          execSync(keyCommand);
-          console.log("✅ [SSL] Privater Schlüssel erstellt.");
-          execSync(certCommand);
-          console.log("✅ [SSL] Zertifikat erstellt.");
-          console.log("✅ [SSL] Selbstsignierte SSL-Zertifikate erfolgreich erstellt.");
-        } catch (error) {
-            console.error("❌ [SSL] Fehler beim Generieren der Zertifikate:", error.message);
-            console.error("   Stelle sicher, dass OpenSSL installiert und im System-PATH verfügbar ist.");
-            // Beende den Prozess, wenn Zertifikate nicht erstellt werden können, aber HTTPS erforderlich ist.
-            if (this.config.security.requireHttps) {
-                console.error("❌ [FATAL] HTTPS ist erforderlich, aber Zertifikate konnten nicht erstellt werden. Server wird beendet.");
-                process.exit(1);
-            }
-        }
-      }
-    } catch (error) {
-      console.error("❌ [SSL] Fehler beim SSL-Setup:", error);
-    }
-  }
 
   // Password Validation
   validatePasswordStrength(password) {
@@ -2598,10 +2563,9 @@ class DatabaseBackupTool {
     const host = this.config.server.host;
 
     if (this.securityConfig.requireHttps) {
-      this.generateSelfSignedCert();
       
-      const keyPath = path.join(this.sslCertPath, "private.key");
-      const certPath = path.join(this.sslCertPath, "certificate.crt");
+      const keyPath = path.join(this.sslCertPath, "privkey.pem");
+      const certPath = path.join(this.sslCertPath, "fullchain.pem");
 
       if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
         const httpsOptions = {
