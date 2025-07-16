@@ -1135,7 +1135,7 @@ class DatabaseBackupTool {
     }, 5 * 60 * 1000); // Alle 5 Minuten
 
     // Statische Dateien mit Cache-Control
-    this.app.use(express.static("public", {
+    this.app.use(express.static(path.join(__dirname, "public"), {
       maxAge: '1d',
       etag: true,
       lastModified: true,
