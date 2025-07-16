@@ -58,13 +58,13 @@ class DatabaseBackupTool {
     
     // Security Configuration
     this.securityConfig = {
-      maxFailedAttempts: parseInt(process.env.MAX_FAILED_ATTEMPTS) || 5,
-      lockoutDuration: 15 * 60 * 1000, // 15 Minuten
-      captchaThreshold: 3, // Nach 3 fehlgeschlagenen Versuchen
-      sessionTimeout: 30 * 60 * 1000, // 30 Minuten
-      requireHttps: process.env.REQUIRE_HTTPS === "true" || false,
-      enable2FA: process.env.ENABLE_2FA === "true" || false,
-      strongPasswords: process.env.STRONG_PASSWORDS === "true" || true,
+      maxFailedAttempts: this.config.security.maxFailedAttempts || 5,
+      lockoutDuration: this.config.security.lockoutDuration || 15 * 60 * 1000,
+      captchaThreshold: this.config.security.captchaThreshold || 3,
+      sessionTimeout: this.config.security.sessionTimeout || 30 * 60 * 1000,
+      requireHttps: this.config.security.requireHttps || false,
+      enable2FA: this.config.security.enable2FA || false,
+      strongPasswords: this.config.security.strongPasswords !== false,
     };
 
     console.log("🛡️ [SECURITY] Initialisiere Sicherheits-Features:");
