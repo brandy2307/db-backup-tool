@@ -5,10 +5,10 @@
     "update_url": "https://github.com/brandy2307/db-backup-tool/blob/main/dbtool-egg.json"
   },
   "exported_at": "2024-12-15T14:40:56+00:00",
-  "name": "DB Backup Tool (Enhanced mit Git Backup)",
+  "name": "DB Backup Tool (Enhanced mit SSL-Konfiguration)",
   "author": "brandy@example.com",
   "uuid": "db9f372e-01d7-4c9b-a109-e49990d68d46",
-  "description": "Tool für automatisierte Datenbank-Backups mit fest integriertem Update-Repository und Git Backup Integration (GitHub/GitLab/Bitbucket)",
+  "description": "Tool für automatisierte Datenbank-Backups mit SSL-Unterstützung und Git Backup Integration",
   "features": [
     "eula=false"
   ],
@@ -18,14 +18,14 @@
   "file_denylist": [],
   "startup": "cd /home/container && if [ ! -f \"db-backup-tool/package.json\" ]; then echo \"ERROR: package.json not found. Please reinstall the server.\"; exit 1; fi && cd db-backup-tool && npm start",
   "config": {
-    "files": "{\r\n    \"db-backup-tool/config.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"server.port\": \"{{server.build.default.port}}\",\r\n            \"server.host\": \"0.0.0.0\"\r\n        }\r\n    }\r\n}",
+    "files": "{\r\n    \"db-backup-tool/config.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"server.port\": \"{{server.build.default.port}}\",\r\n            \"server.host\": \"0.0.0.0\",\r\n            \"security.requireHttps\": \"{{env.REQUIRE_HTTPS}}\",\r\n            \"ssl.domain\": \"{{env.SSL_DOMAIN}}\",\r\n            \"ssl.email\": \"{{env.SSL_EMAIL}}\",\r\n            \"ssl.method\": \"{{env.SSL_METHOD}}\",\r\n            \"ssl.autoRenewal\": \"{{env.SSL_AUTO_RENEWAL}}\"\r\n        }\r\n    }\r\n}",
     "startup": "{\r\n    \"done\": \"Server läuft auf\"\r\n}",
     "logs": "{}",
     "stop": "^C"
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# DB Backup Tool Installation - Enhanced mit Git Backup\n\nset -e\n\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\n# Fest definiertes Repository - keine Benutzer-Konfiguration mehr nötig\nREPO_URL=\"https://github.com/brandy2307/db-backup-tool.git\"\nREPO_BRANCH=\"main\"\n\necho \"=================================\"\necho \"DB BACKUP TOOL INSTALLATION (Enhanced)\"\necho \"=================================\"\necho \"Offizielles Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Target: ${APP_DIR}\"\necho \"Features: Auto-Update + Git Backup Integration\"\necho \"=================================\"\n\n# System Dependencies installieren\necho \"[1/6] Installing system dependencies...\"\napt update\napt install -y wget curl gnupg2 software-properties-common git\n\n# Node.js installieren\necho \"[2/6] Installing Node.js...\"\ncurl -fsSL https://deb.nodesource.com/setup_18.x | bash -\napt install -y nodejs\n\n# Database Tools installieren\necho \"[3/6] Installing database tools...\"\napt install -y mysql-client || apt install -y default-mysql-client || echo \"MySQL client failed\"\napt install -y postgresql-client || apt install -y postgresql-client-common || echo \"PostgreSQL client failed\"\n\n# MongoDB Tools\necho \"Installing MongoDB tools...\"\ncurl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg\necho \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main\" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list\napt update\napt install -y mongodb-database-tools || echo \"MongoDB tools failed\"\n\n# Git konfigurieren (für Backup Repository)\necho \"[4/6] Configuring Git for backup repositories...\"\ngit config --global init.defaultBranch main\ngit config --global user.name \"DB Backup Tool\"\ngit config --global user.email \"backup@localhost\"\n\n# Tools verifikation\necho \"[5/6] Verifying tools...\"\necho \"Node.js: $(node --version)\"\necho \"NPM: $(npm --version)\"\necho \"Git: $(git --version)\"\n\n# Wechsel zum Zielverzeichnis\ncd \"${DIR}\"\n\n# Alte Installation entfernen\nif [ -d \"${APP_DIR}\" ]; then\n    echo \"Removing old installation...\"\n    rm -rf \"${APP_DIR}\"\nfi\n\n# Repository Setup\necho \"[6/6] Setting up official repository...\"\necho \"Cloning from official repository: ${REPO_URL}\"\n\n# Test Repository-Zugriff\nif ! git ls-remote --heads \"${REPO_URL}\" >/dev/null 2>&1; then\n    echo \"ERROR: Official repository '${REPO_URL}' is not accessible!\"\n    echo \"This might be a temporary network issue. Please try again later.\"\n    exit 1\nfi\n\n# Test Branch-Existenz\nif ! git ls-remote --heads \"${REPO_URL}\" | grep -q \"refs/heads/${REPO_BRANCH}$\"; then\n    echo \"ERROR: Branch '${REPO_BRANCH}' does not exist in official repository!\"\n    echo \"Available branches:\"\n    git ls-remote --heads \"${REPO_URL}\" | sed 's/.*refs\\/heads\\///'\n    exit 1\nfi\n\n# Repository klonen\necho \"Cloning official repository...\"\nif ! git clone -b \"${REPO_BRANCH}\" \"${REPO_URL}\" \"${APP_DIR}\"; then\n    echo \"ERROR: Git clone from official repository failed!\"\n    exit 1\nfi\n\n# Verifikation nach Clone\ncd \"${APP_DIR}\"\necho \"Official repository cloned successfully to: $(pwd)\"\necho \"Contents:\"\nls -la\n\n# Prüfe kritische Dateien\nif [ ! -f \"package.json\" ]; then\n    echo \"ERROR: package.json not found in official repository!\"\n    echo \"This indicates a problem with the official repository.\"\n    exit 1\nfi\n\nif [ ! -f \"server.js\" ]; then\n    echo \"ERROR: server.js not found in official repository!\"\n    echo \"This indicates a problem with the official repository.\"\n    exit 1\nfi\n\n# Validiere package.json\nif ! node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8'))\"; then\n    echo \"ERROR: package.json from official repository is invalid JSON!\"\n    exit 1\nfi\n\necho \"✓ All required files found and valid from official repository\"\n\n# Dependencies installieren\necho \"Installing dependencies...\"\nnpm cache clean --force\nif ! npm install --production; then\n    echo \"Trying with legacy-peer-deps...\"\n    npm install --production --legacy-peer-deps\nfi\n\n# Verzeichnisse erstellen\necho \"Creating directories...\"\nmkdir -p backups logs config public\n\n# Config erstellen (falls nicht vorhanden) - Enhanced mit Git Backup\nif [ ! -f \"config.json\" ]; then\n    echo \"Creating enhanced config.json with Git Backup support...\"\n    cat > config.json << EOF\n{\n  \"server\": {\n    \"port\": 8080,\n    \"host\": \"0.0.0.0\",\n    \"httpsPort\": 8443\n  },\n  \"security\": {\n    \"sessionSecret\": \"change-this-secret-key-in-production\",\n    \"jwtSecret\": \"change-this-jwt-secret-in-production\",\n    \"defaultAdmin\": {\n      \"username\": \"admin\",\n      \"password\": \"admin123\"\n    },\n    \"requireHttps\": false,\n    \"enable2FA\": false,\n    \"strongPasswords\": true,\n    \"maxFailedAttempts\": 5\n  },\n  \"backup\": {\n    \"defaultPath\": \"./backups\",\n    \"maxBackups\": 10,\n    \"compression\": true\n  },\n  \"logging\": {\n    \"level\": \"info\",\n    \"file\": \"./logs/app.log\"\n  },\n  \"updates\": {\n    \"autoUpdate\": true,\n    \"repository\": \"${REPO_URL}\",\n    \"branch\": \"${REPO_BRANCH}\"\n  },\n  \"gitBackup\": {\n    \"enabled\": false,\n    \"repository\": \"\",\n    \"username\": \"\",\n    \"branch\": \"main\"\n  }\n}\nEOF\nfi\n\n# Update-Script erstellen (mit fest definierten Repository-Daten)\ncat > update.sh << 'EOF'\n#!/bin/bash\n# Auto-Update Script für offizielles Repository - Enhanced Version\n\nset -e\n\n# Fest definierte Repository-Daten\nREPO_URL=\"https://github.com/brandy2307/db-backup-tool.git\"\nREPO_BRANCH=\"main\"\n\necho \"=================================\"\necho \"🔄 DB BACKUP TOOL AUTO-UPDATE (Enhanced)\"\necho \"=================================\"\necho \"📦 Offizielles Repository: ${REPO_URL}\"\necho \"🔗 Branch: ${REPO_BRANCH}\"\necho \"📁 Verzeichnis: $(pwd)\"\necho \"🎯 Features: Auto-Update + Git Backup\"\necho \"=================================\"\n\n# Funktion: Berechtigungen setzen\nfix_permissions() {\n    echo \"🔧 Setze korrekte Berechtigungen...\"\n    \n    # Hauptverzeichnis\n    chmod 755 . 2>/dev/null || true\n    \n    # Ausführbare Dateien\n    chmod +x update.sh 2>/dev/null || true\n    chmod +x server.js 2>/dev/null || true\n    \n    # Konfigurationsdateien (lesbar/schreibbar)\n    chmod 644 *.json 2>/dev/null || true\n    chmod 644 *.js 2>/dev/null || true\n    chmod 644 *.md 2>/dev/null || true\n    \n    # Verzeichnisse (ausführbar für Navigation)\n    chmod 755 backups 2>/dev/null || true\n    chmod 755 logs 2>/dev/null || true\n    chmod 755 config 2>/dev/null || true\n    chmod 755 public 2>/dev/null || true\n    \n    # Frontend-Dateien\n    chmod 644 public/*.html 2>/dev/null || true\n    chmod 644 public/*.css 2>/dev/null || true\n    chmod 644 public/*.js 2>/dev/null || true\n    \n    # Git-Dateien\n    chmod 644 .gitattributes 2>/dev/null || true\n    \n    # NPM/Node-spezifische Dateien\n    chmod 644 package*.json 2>/dev/null || true\n    \n    echo \"✅ Berechtigungen gesetzt\"\n}\n\n# Prüfe ob wir in einem Git Repository sind\nif [ ! -d \".git\" ]; then\n    echo \"❌ Kein Git Repository gefunden!\"\n    echo \"ℹ️  Bitte führe eine Neuinstallation durch\"\n    exit 1\nfi\n\n# Prüfe ob das Repository das offizielle ist\nCURRENT_REPO=$(git remote get-url origin 2>/dev/null || echo \"unknown\")\nif [ \"$CURRENT_REPO\" != \"$REPO_URL\" ]; then\n    echo \"⚠️  Repository-URL stimmt nicht überein!\"\n    echo \"   Aktuell: $CURRENT_REPO\"\n    echo \"   Erwartet: $REPO_URL\"\n    echo \"🔄 Aktualisiere Remote-URL...\"\n    git remote set-url origin \"$REPO_URL\"\nfi\n\n# Backup wichtiger Konfigurationsdateien\necho \"💾 Sichere Konfigurationsdateien...\"\nBACKUP_DIR=\"./temp_backup_$(date +%s)\"\nmkdir -p \"$BACKUP_DIR\"\n\n# Backup der wichtigsten Dateien\nif [ -f \"config.json\" ]; then\n    cp config.json \"$BACKUP_DIR/config.json\"\n    echo \"✅ config.json gesichert\"\nfi\n\nif [ -f \"backups/schedules.json\" ]; then\n    cp backups/schedules.json \"$BACKUP_DIR/schedules.json\"\n    echo \"✅ schedules.json gesichert\"\nfi\n\n# Backup des kompletten backups-Ordners (falls vorhanden und nicht leer)\nif [ -d \"backups\" ] && [ \"$(ls -A backups 2>/dev/null)\" ]; then\n    cp -r backups \"$BACKUP_DIR/backups_folder\" 2>/dev/null || true\n    echo \"✅ Backup-Ordner gesichert (inkl. Git Backup Repository)\"\nfi\n\n# Backup von benutzerdefinierten Frontend-Dateien (falls vorhanden)\nif [ -f \"public/custom.css\" ]; then\n    cp public/custom.css \"$BACKUP_DIR/custom.css\"\n    echo \"✅ Benutzerdefinierte CSS-Datei gesichert\"\nfi\n\nif [ -f \"public/custom.js\" ]; then\n    cp public/custom.js \"$BACKUP_DIR/custom.js\"\n    echo \"✅ Benutzerdefinierte JS-Datei gesichert\"\nfi\n\n# Git Update vom offiziellen Repository\necho \"🔍 Prüfe auf Updates...\"\ngit fetch origin\n\n# Hole aktuelle Commit-Hashes\nLOCAL=$(git rev-parse HEAD)\nREMOTE=$(git rev-parse origin/$REPO_BRANCH)\n\nif [ \"$LOCAL\" != \"$REMOTE\" ]; then\n    echo \"🔄 Update verfügbar! Aktualisiere...\"\n    echo \"   Von: $(git rev-parse --short HEAD)\"\n    echo \"   Zu:  $(git rev-parse --short origin/$REPO_BRANCH)\"\n    \n    # Stash lokale Änderungen (falls vorhanden)\n    git stash push -m \"Auto-stash before update $(date)\" 2>/dev/null || true\n    \n    # Hard reset zum neuesten Stand\n    git reset --hard origin/$REPO_BRANCH\n    \n    # Berechtigungen sofort nach Git-Update setzen\n    fix_permissions\n    \n    # Dependencies aktualisieren\n    echo \"📦 Aktualisiere Dependencies...\"\n    npm cache clean --force 2>/dev/null || true\n    \n    # NPM install mit verschiedenen Fallback-Optionen\n    if npm install --production --omit=dev; then\n        echo \"✅ Dependencies mit --omit=dev installiert\"\n    elif npm install --production --legacy-peer-deps; then\n        echo \"✅ Dependencies mit --legacy-peer-deps installiert\"\n    elif npm install --production; then\n        echo \"✅ Dependencies installiert\"\n    else\n        echo \"⚠️  Dependency-Installation fehlgeschlagen - fahre trotzdem fort\"\n    fi\n    \n    # Verzeichnisse sicherstellen\n    mkdir -p backups logs config public\n    \n    # Konfigurationsdateien wiederherstellen\n    echo \"🔄 Stelle Konfigurationsdateien wieder her...\"\n    \n    if [ -f \"$BACKUP_DIR/config.json\" ]; then\n        mv \"$BACKUP_DIR/config.json\" config.json\n        echo \"✅ config.json wiederhergestellt\"\n    fi\n    \n    if [ -f \"$BACKUP_DIR/schedules.json\" ]; then\n        mv \"$BACKUP_DIR/schedules.json\" backups/schedules.json\n        echo \"✅ schedules.json wiederhergestellt\"\n    fi\n    \n    # Backup-Ordner wiederherstellen (inklusive Git Backup Repository)\n    if [ -d \"$BACKUP_DIR/backups_folder\" ]; then\n        echo \"🔄 Stelle Backup-Ordner wieder her...\"\n        # Sichere Git Backup Repository falls vorhanden\n        if [ -d \"$BACKUP_DIR/backups_folder/git-backup\" ]; then\n            echo \"📦 Git Backup Repository gefunden - wird wiederhergestellt\"\n        fi\n        \n        # Kopiere kompletten Backup-Ordner\n        cp -r \"$BACKUP_DIR/backups_folder/\"* backups/ 2>/dev/null || true\n        echo \"✅ Backup-Ordner wiederhergestellt (inkl. Git Repository)\"\n    fi\n    \n    # Benutzerdefinierte Frontend-Dateien wiederherstellen\n    if [ -f \"$BACKUP_DIR/custom.css\" ]; then\n        mv \"$BACKUP_DIR/custom.css\" public/custom.css\n        echo \"✅ Benutzerdefinierte CSS-Datei wiederhergestellt\"\n    fi\n    \n    if [ -f \"$BACKUP_DIR/custom.js\" ]; then\n        mv \"$BACKUP_DIR/custom.js\" public/custom.js\n        echo \"✅ Benutzerdefinierte JS-Datei wiederhergestellt\"\n    fi\n    \n    # Frontend-Dateien prüfen\n    echo \"🎨 Prüfe Frontend-Dateien...\"\n    \n    FRONTEND_FILES=(\n        \"public/index.html\"\n        \"public/styles.css\"\n        \"public/app.js\"\n    )\n    \n    MISSING_FILES=()\n    for file in \"${FRONTEND_FILES[@]}\"; do\n        if [ ! -f \"$file\" ]; then\n            MISSING_FILES+=(\"$file\")\n        fi\n    done\n    \n    if [ ${#MISSING_FILES[@]} -gt 0 ]; then\n        echo \"⚠️  Fehlende Frontend-Dateien erkannt:\"\n        for file in \"${MISSING_FILES[@]}\"; do\n            echo \"   - $file\"\n        done\n        echo \"ℹ️  Führe 'git reset --hard origin/main' aus, falls Dateien fehlen\"\n    else\n        echo \"✅ Alle Frontend-Dateien vorhanden (Enhanced Version)\"\n    fi\n    \n    # Finale Berechtigungsreparatur nach dem gesamten Update\n    fix_permissions\n    \n    echo \"✅ Update erfolgreich abgeschlossen!\"\n    echo \"📋 Neue Version: $(git rev-parse --short HEAD)\"\n    echo \"📅 Commit-Datum: $(git log -1 --format=%ci)\"\n    echo \"🎯 Features: Auto-Update + Git Backup Integration\"\n    \nelse\n    echo \"✅ Bereits auf dem neuesten Stand!\"\n    echo \"📋 Aktuelle Version: $(git rev-parse --short HEAD)\"\n    \n    # Auch bei \"kein Update\" die Berechtigungen reparieren\n    echo \"🔧 Repariere Berechtigungen (Wartung)...\"\n    fix_permissions\nfi\n\n# Cleanup der temporären Backup-Dateien\necho \"🧹 Räume temporäre Dateien auf...\"\nrm -rf \"$BACKUP_DIR\" 2>/dev/null || true\n\n# Zeige aktuelle Installation\necho \"=================================\"\necho \"📊 AKTUELLE INSTALLATION (Enhanced)\"\necho \"=================================\"\necho \"Repository: $(git remote get-url origin)\"\necho \"Branch: $(git branch --show-current 2>/dev/null || echo \"main\")\"\necho \"Commit: $(git rev-parse --short HEAD)\"\necho \"Datum: $(git log -1 --format=%ci 2>/dev/null || echo \"Unknown\")\"\necho \"Node.js: $(node --version 2>/dev/null || echo \"Unknown\")\"\necho \"NPM: $(npm --version 2>/dev/null || echo \"Unknown\")\"\necho \"\"\necho \"📁 Dateistruktur:\"\necho \"├── server.js $([ -f \"server.js\" ] && echo \"✅\" || echo \"❌\")\"\necho \"├── package.json $([ -f \"package.json\" ] && echo \"✅\" || echo \"❌\")\"\necho \"├── config.json $([ -f \"config.json\" ] && echo \"✅\" || echo \"❌\")\"\necho \"├── update.sh $([ -f \"update.sh\" ] && echo \"✅\" || echo \"❌\") $([ -x \"update.sh\" ] && echo \"(🔓)\" || echo \"(🔒)\")\"\necho \"└── public/\"\necho \"    ├── index.html $([ -f \"public/index.html\" ] && echo \"✅\" || echo \"❌\")\"\necho \"    ├── styles.css $([ -f \"public/styles.css\" ] && echo \"✅\" || echo \"❌\")\"\necho \"    ├── app.js $([ -f \"public/app.js\" ] && echo \"✅\" || echo \"❌\")\"\necho \"    ├── custom.css $([ -f \"public/custom.css\" ] && echo \"📝\" || echo \"⚪\")\"\necho \"    └── custom.js $([ -f \"public/custom.js\" ] && echo \"📝\" || echo \"⚪\")\"\necho \"\"\necho \"📂 Verzeichnisse:\"\necho \"├── backups/ $([ -d \"backups\" ] && echo \"✅\" || echo \"❌\")\"\necho \"│   └── git-backup/ $([ -d \"backups/git-backup\" ] && echo \"📦 (Git Repository)\" || echo \"⚪ (Nicht initialisiert)\")\"\necho \"├── logs/ $([ -d \"logs\" ] && echo \"✅\" || echo \"❌\")\"\necho \"└── config/ $([ -d \"config\" ] && echo \"✅\" || echo \"❌\")\"\necho \"\"\necho \"🔧 Verfügbare Tools:\"\necho \"├── git: $(command -v git >/dev/null 2>&1 && echo \"✅\" || echo \"❌\")\"\necho \"├── npm: $(command -v npm >/dev/null 2>&1 && echo \"✅\" || echo \"❌\")\"\necho \"├── node: $(command -v node >/dev/null 2>&1 && echo \"✅\" || echo \"❌\")\"\necho \"├── mysql: $(command -v mysql >/dev/null 2>&1 && echo \"✅\" || echo \"❌\")\"\necho \"├── pg_dump: $(command -v pg_dump >/dev/null 2>&1 && echo \"✅\" || echo \"❌\")\"\necho \"└── mongodump: $(command -v mongodump >/dev/null 2>&1 && echo \"✅\" || echo \"❌\")\"\necho \"\"\necho \"Legende: ✅ OK | ❌ Fehlt | 📝 Benutzerdefiniert | ⚪ Optional | 🔓 Ausführbar | 🔒 Gesperrt | 📦 Git Repository\"\necho \"=================================\"\n\necho \"🎉 Update-Prozess abgeschlossen!\"\necho \"🔧 Alle Berechtigungen wurden automatisch repariert!\"\necho \"📤 Git Backup Integration verfügbar!\"\n\n# Finale Validierung\nif [ -x \"update.sh\" ]; then\n    echo \"✅ Update-Script ist korrekt ausführbar\"\nelse\n    echo \"⚠️  Update-Script Berechtigungen konnten nicht gesetzt werden\"\n    echo \"   Führe manuell aus: chmod +x update.sh\"\nfi\n\necho \"\"\necho \"💡 HINWEISE:\"\necho \"Frontend-Anpassungen:\"\necho \"├── public/custom.css  - Eigene CSS-Styles\"\necho \"└── public/custom.js   - Eigene JavaScript-Funktionen\"\necho \"Diese werden bei Updates automatisch gesichert!\"\necho \"\"\necho \"Git Backup Integration:\"\necho \"├── Aktivierung über Web-Interface (Git Backup Tab)\"\necho \"├── Unterstützt GitHub, GitLab, Bitbucket\"\necho \"├── Automatisches Cleanup alter Backups\"\necho \"└── Sichere Token-basierte Authentifizierung\"\nEOF\n\nchmod +x update.sh\n\n# Weitere Dateien\necho \"[]\" > backups/schedules.json\necho \"* text=auto\" > .gitattributes\n\n# Berechtigungen\nchmod 755 .\nchmod 644 *.json *.js 2>/dev/null || true\nchmod 755 backups logs config public 2>/dev/null || true\n\n# Finale Verifikation\necho \"=================================\"\necho \"INSTALLATION COMPLETE (Enhanced)\"\necho \"=================================\"\necho \"Official Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Directory: $(pwd)\"\necho \"Git info: $(git remote get-url origin) ($(git rev-parse --short HEAD))\"\necho \"Node.js: $(node --version)\"\necho \"Features: Auto-Update + Git Backup Integration\"\necho \"Critical files:\"\nls -la package.json server.js config.json\necho \"Enhanced frontend:\"\nls -la public/\necho \"=================================\"\n\nif [ ! -f \"package.json\" ] || [ ! -f \"server.js\" ]; then\n    echo \"CRITICAL ERROR: Missing required files from official repository!\"\n    exit 1\nfi\n\necho \"✅ Installation successful from official repository!\"\necho \"ℹ️  Updates will be automatically fetched from the official repository\"\necho \"ℹ️  No manual repository configuration required\"\necho \"🎯 New Features:\"\necho \"   - Git Backup Integration (GitHub/GitLab/Bitbucket)\"\necho \"   - Enhanced Frontend with separate CSS/JS files\"\necho \"   - Automatic cleanup of old backups in Git repositories\"\necho \"   - Secure token-based authentication for Git\"\necho \"   - Update-safe custom frontend modifications\"",
+      "script": "#!/bin/bash\n# DB Backup Tool Installation - Enhanced mit SSL-Konfiguration\n\nset -e\n\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\n# Fest definiertes Repository\nREPO_URL=\"https://github.com/brandy2307/db-backup-tool.git\"\nREPO_BRANCH=\"main\"\n\necho \"=================================\"\necho \"DB BACKUP TOOL INSTALLATION (Enhanced SSL)\"\necho \"=================================\"\necho \"Offizielles Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Target: ${APP_DIR}\"\necho \"SSL-Unterstützung: Aktiviert\"\necho \"=================================\"\n\n# System Dependencies installieren\necho \"[1/7] Installing system dependencies...\"\napt update\napt install -y wget curl gnupg2 software-properties-common git openssl\n\n# Node.js installieren\necho \"[2/7] Installing Node.js...\"\ncurl -fsSL https://deb.nodesource.com/setup_18.x | bash -\napt install -y nodejs\n\n# Database Tools installieren\necho \"[3/7] Installing database tools...\"\napt install -y mysql-client || apt install -y default-mysql-client || echo \"MySQL client failed\"\napt install -y postgresql-client || apt install -y postgresql-client-common || echo \"PostgreSQL client failed\"\n\n# MongoDB Tools\necho \"Installing MongoDB tools...\"\ncurl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg\necho \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main\" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list\napt update\napt install -y mongodb-database-tools || echo \"MongoDB tools failed\"\n\n# SSL/TLS Tools für Zertifikat-Management\necho \"[4/7] Installing SSL/TLS tools...\"\napt install -y certbot || echo \"Certbot installation failed (optional)\"\n\n# Git konfigurieren\necho \"[5/7] Configuring Git...\"\ngit config --global init.defaultBranch main\ngit config --global user.name \"DB Backup Tool\"\ngit config --global user.email \"backup@localhost\"\n\n# Tools verifikation\necho \"[6/7] Verifying tools...\"\necho \"Node.js: $(node --version)\"\necho \"NPM: $(npm --version)\"\necho \"Git: $(git --version)\"\necho \"OpenSSL: $(openssl version)\"\n\n# Wechsel zum Zielverzeichnis\ncd \"${DIR}\"\n\n# Alte Installation entfernen\nif [ -d \"${APP_DIR}\" ]; then\n    echo \"Removing old installation...\"\n    rm -rf \"${APP_DIR}\"\nfi\n\n# Repository Setup\necho \"[7/7] Setting up official repository...\"\necho \"Cloning from official repository: ${REPO_URL}\"\n\n# Test Repository-Zugriff\nif ! git ls-remote --heads \"${REPO_URL}\" >/dev/null 2>&1; then\n    echo \"ERROR: Official repository '${REPO_URL}' is not accessible!\"\n    exit 1\nfi\n\n# Repository klonen\necho \"Cloning official repository...\"\nif ! git clone -b \"${REPO_BRANCH}\" \"${REPO_URL}\" \"${APP_DIR}\"; then\n    echo \"ERROR: Git clone from official repository failed!\"\n    exit 1\nfi\n\n# Verifikation nach Clone\ncd \"${APP_DIR}\"\necho \"Repository cloned successfully to: $(pwd)\"\n\n# Prüfe kritische Dateien\nif [ ! -f \"package.json\" ]; then\n    echo \"ERROR: package.json not found!\"\n    exit 1\nfi\n\nif [ ! -f \"server.js\" ]; then\n    echo \"ERROR: server.js not found!\"\n    exit 1\nfi\n\necho \"✓ All required files found\"\n\n# Dependencies installieren\necho \"Installing dependencies...\"\nnpm cache clean --force\nif ! npm install --production; then\n    echo \"Trying with legacy-peer-deps...\"\n    npm install --production --legacy-peer-deps\nfi\n\n# Verzeichnisse erstellen\necho \"Creating directories...\"\nmkdir -p backups logs config public ssl\n\n# SSL-Verzeichnis Berechtigungen\nchmod 700 ssl\n\n# Config erstellen mit SSL-Unterstützung\nif [ ! -f \"config.json\" ]; then\n    echo \"Creating enhanced config.json with SSL support...\"\n    cat > config.json << EOF\n{\n  \"server\": {\n    \"port\": 8080,\n    \"host\": \"0.0.0.0\",\n    \"httpsPort\": 8443\n  },\n  \"security\": {\n    \"sessionSecret\": \"change-this-secret-key-in-production\",\n    \"jwtSecret\": \"change-this-jwt-secret-in-production\",\n    \"requireHttps\": false,\n    \"enable2FA\": false,\n    \"strongPasswords\": true,\n    \"maxFailedAttempts\": 5\n  },\n  \"ssl\": {\n    \"domain\": \"localhost\",\n    \"email\": \"admin@localhost\",\n    \"method\": \"selfsigned\",\n    \"autoRenewal\": true,\n    \"keySize\": 4096,\n    \"certValidity\": 365\n  },\n  \"backup\": {\n    \"defaultPath\": \"./backups\",\n    \"maxBackups\": 10,\n    \"compression\": true\n  },\n  \"logging\": {\n    \"level\": \"info\",\n    \"file\": \"./logs/app.log\"\n  },\n  \"updates\": {\n    \"autoUpdate\": true,\n    \"repository\": \"${REPO_URL}\",\n    \"branch\": \"${REPO_BRANCH}\"\n  },\n  \"gitBackup\": {\n    \"enabled\": false,\n    \"repository\": \"\",\n    \"username\": \"\",\n    \"branch\": \"main\"\n  }\n}\nEOF\nfi\n\n# SSL-Setup Script ausführbar machen\nif [ -f \"ssl-setup.sh\" ]; then\n    chmod +x ssl-setup.sh\n    echo \"✅ SSL-Setup Script bereit\"\nelse\n    echo \"⚠️ SSL-Setup Script nicht gefunden - wird zur Laufzeit erstellt\"\nfi\n\n# Update-Script ausführbar machen\nif [ -f \"update.sh\" ]; then\n    chmod +x update.sh\n    echo \"✅ Update-Script bereit\"\nfi\n\n# Dateiberechtigungen setzen\nchmod 755 .\nchmod 644 *.json *.js 2>/dev/null || true\nchmod 755 backups logs config public ssl 2>/dev/null || true\n\n# Finale Verifikation\necho \"=================================\"\necho \"INSTALLATION COMPLETE (Enhanced SSL)\"\necho \"=================================\"\necho \"Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Directory: $(pwd)\"\necho \"SSL-Unterstützung: ✅ Aktiviert\"\necho \"Verfügbare SSL-Methoden: selfsigned, letsencrypt, manual\"\necho \"Standard SSL-Konfiguration: Self-Signed für localhost\"\necho \"=================================\"\n\necho \"✅ Installation erfolgreich!\"\necho \"🔐 SSL-Konfiguration über Pelican Panel Environment Variables\"\necho \"📝 SSL-Setup wird automatisch beim ersten Start ausgeführt\"",
       "container": "debian:bookworm-slim",
       "entrypoint": "bash"
     }
@@ -99,7 +99,7 @@
     },
     {
       "name": "Max Backups",
-      "description": "Maximale Anzahl von Backups die gespeichert werden sollen (lokal und im Git Repository)",
+      "description": "Maximale Anzahl von Backups die gespeichert werden sollen",
       "env_variable": "MAX_BACKUPS",
       "default_value": "10",
       "user_viewable": true,
@@ -121,7 +121,7 @@
     },
     {
       "name": "Git Backup aktivieren",
-      "description": "Automatisches Pushen von Backups zu Git Repository (GitHub/GitLab/Bitbucket)",
+      "description": "Automatisches Pushen von Backups zu Git Repository",
       "env_variable": "GIT_BACKUP_ENABLED",
       "default_value": "false",
       "user_viewable": true,
@@ -132,7 +132,7 @@
     },
     {
       "name": "Git Repository URL",
-      "description": "HTTPS URL des Git Repositories für Backups (z.B. https://github.com/user/backup-repo.git)",
+      "description": "HTTPS URL des Git Repositories für Backups",
       "env_variable": "GIT_BACKUP_REPOSITORY",
       "default_value": "",
       "user_viewable": true,
@@ -154,7 +154,7 @@
     },
     {
       "name": "Git Access Token",
-      "description": "Personal Access Token oder App Password für Git Repository (GitHub: Settings → Developer settings → Personal access tokens)",
+      "description": "Personal Access Token für Git Repository",
       "env_variable": "GIT_BACKUP_TOKEN",
       "default_value": "",
       "user_viewable": false,
@@ -165,7 +165,7 @@
     },
     {
       "name": "Git Branch",
-      "description": "Git Branch für Backups (Standard: main)",
+      "description": "Git Branch für Backups",
       "env_variable": "GIT_BACKUP_BRANCH",
       "default_value": "main",
       "user_viewable": true,
@@ -175,8 +175,8 @@
       "field_type": "text"
     },
     {
-      "name": "HTTPS erzwingen",
-      "description": "Erzwingt die Nutzung von HTTPS für alle Verbindungen.",
+      "name": "HTTPS aktivieren",
+      "description": "Aktiviert HTTPS für die Anwendung (SSL-Zertifikat erforderlich)",
       "env_variable": "REQUIRE_HTTPS",
       "default_value": "false",
       "user_viewable": true,
@@ -186,47 +186,124 @@
       "field_type": "text"
     },
     {
+      "name": "SSL-Methode",
+      "description": "SSL-Zertifikat Methode: selfsigned (empfohlen für Pelican), letsencrypt (nur mit öffentlicher Domain), manual (eigene Zertifikate)",
+      "env_variable": "SSL_METHOD",
+      "default_value": "selfsigned",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:selfsigned,letsencrypt,manual",
+      "sort": 15,
+      "field_type": "text"
+    },
+    {
+      "name": "SSL Domain",
+      "description": "Domain für SSL-Zertifikat (localhost für Self-Signed, echte Domain für Let's Encrypt)",
+      "env_variable": "SSL_DOMAIN",
+      "default_value": "localhost",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|min:3|max:255",
+      "sort": 16,
+      "field_type": "text"
+    },
+    {
+      "name": "SSL Email",
+      "description": "Email-Adresse für SSL-Zertifikat (erforderlich für Let's Encrypt)",
+      "env_variable": "SSL_EMAIL",
+      "default_value": "admin@localhost",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|min:5|max:255",
+      "sort": 17,
+      "field_type": "text"
+    },
+    {
+      "name": "SSL Key Size",
+      "description": "RSA Schlüssel-Größe in Bits (4096 empfohlen)",
+      "env_variable": "SSL_KEY_SIZE",
+      "default_value": "4096",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|in:2048,4096",
+      "sort": 18,
+      "field_type": "text"
+    },
+    {
+      "name": "SSL Zertifikat Gültigkeit",
+      "description": "Gültigkeit des SSL-Zertifikats in Tagen",
+      "env_variable": "SSL_CERT_VALIDITY",
+      "default_value": "365",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:30|max:3650",
+      "sort": 19,
+      "field_type": "text"
+    },
+    {
+      "name": "SSL Auto-Renewal",
+      "description": "Automatische Erneuerung von SSL-Zertifikaten (nur für Let's Encrypt)",
+      "env_variable": "SSL_AUTO_RENEWAL",
+      "default_value": "true",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
+      "sort": 20,
+      "field_type": "text"
+    },
+    {
+      "name": "SSL Setup beim Start",
+      "description": "Führt SSL-Setup automatisch beim Server-Start aus",
+      "env_variable": "SSL_SETUP_ON_START",
+      "default_value": "true",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
+      "sort": 21,
+      "field_type": "text"
+    },
+    {
       "name": "HTTPS Port",
-      "description": "Der Port für den HTTPS-Server.",
+      "description": "Der Port für den HTTPS-Server",
       "env_variable": "HTTPS_PORT",
       "default_value": "8443",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|min:1|max:65535",
-      "sort": 15,
+      "sort": 22,
       "field_type": "text"
     },
     {
       "name": "2FA aktivieren",
-      "description": "Aktiviert die Zwei-Faktor-Authentifizierung (2FA) für alle Benutzer.",
+      "description": "Aktiviert die Zwei-Faktor-Authentifizierung",
       "env_variable": "ENABLE_2FA",
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 16,
+      "sort": 23,
       "field_type": "text"
     },
     {
       "name": "Starke Passwörter erzwingen",
-      "description": "Erzwingt die Nutzung von starken Passwörtern (Länge, Zeichen, etc.).",
+      "description": "Erzwingt die Nutzung von starken Passwörtern",
       "env_variable": "STRONG_PASSWORDS",
       "default_value": "true",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 17,
+      "sort": 24,
       "field_type": "text"
     },
     {
       "name": "Max. Fehlversuche (Login)",
-      "description": "Maximale Anzahl an fehlgeschlagenen Login-Versuchen, bevor eine Sperre erfolgt.",
+      "description": "Maximale Anzahl an fehlgeschlagenen Login-Versuchen",
       "env_variable": "MAX_FAILED_ATTEMPTS",
       "default_value": "5",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|min:1|max:20",
-      "sort": 18,
+      "sort": 25,
       "field_type": "text"
     }
   ]
