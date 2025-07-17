@@ -1307,6 +1307,7 @@ fi
     }
   }
   // ====== API-ROUTEN SETUP ======
+  
   setupRoutes() {
     console.log("🛣️ [ROUTES] Initialisiere API-Routen...");
 
@@ -1821,8 +1822,8 @@ fi
     });
 
     console.log("✅ [ROUTES] Sicherheits- und Authentifizierungs-Routen konfiguriert");
-  }
-  // ====== SSL-ROUTEN ======
+
+    // ====== SSL-ROUTEN ======
     this.setupSSLRoutes();
 
     // ====== BACKUP UND SYSTEM ROUTEN ======
