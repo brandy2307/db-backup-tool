@@ -22,7 +22,7 @@ const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
 
 // ====== SSL-MANAGEMENT IMPORT ======
-const SSLCertificateManager = require("./ssl-management.js");
+const EnhancedSSLCertificateManager = require("./ssl-management.js");
 const SSLHealthCheck = require("./ssl-health-check.js");
 
 class DatabaseBackupTool {
@@ -262,22 +262,23 @@ class DatabaseBackupTool {
 
   // ====== SSL-INITIALISIERUNG ======
   async initializeSSL() {
-    console.log("🔐 [SSL] Initialisiere SSL Certificate Manager...");
+    console.log("🔐 [SSL] Initialisiere Enhanced SSL Certificate Manager...");
 
     try {
-      // SSL Manager erstellen
-      this.sslManager = new SSLCertificateManager(this.config);
+      // Enhanced SSL Manager erstellen
+      this.sslManager = new EnhancedSSLCertificateManager(this.config);
 
       // SSL Health Check System initialisieren
+      const SSLHealthCheck = require("./ssl-health-check.js");
       this.sslHealthCheck = new SSLHealthCheck(this.sslManager);
 
-      // SSL Manager initialisieren
+      // Enhanced SSL Manager initialisieren
       await this.sslManager.initialize();
 
-      console.log("✅ [SSL] SSL Certificate Manager erfolgreich initialisiert");
+      console.log("✅ [SSL] Enhanced SSL Certificate Manager erfolgreich initialisiert");
     } catch (error) {
       console.error(
-        "❌ [SSL] SSL-Initialisierung fehlgeschlagen:",
+        "❌ [SSL] Enhanced SSL-Initialisierung fehlgeschlagen:",
         error.message
       );
       throw error;
@@ -287,7 +288,7 @@ class DatabaseBackupTool {
   // ====== SSL-INITIALISIERUNG AUS UMGEBUNGSVARIABLEN ======
   async initializeSSLFromEnvironment() {
     console.log(
-      "🔐 [SSL] Initialisiere SSL basierend auf Umgebungsvariablen..."
+      "🔐 [SSL] Initialisiere Enhanced SSL basierend auf Umgebungsvariablen..."
     );
 
     // SSL-Konfiguration aus Umgebungsvariablen laden
@@ -302,11 +303,12 @@ class DatabaseBackupTool {
       setupOnStart: process.env.SSL_SETUP_ON_START === "true",
     };
 
-    console.log("🔐 [SSL] Konfiguration geladen:");
+    console.log("🔐 [SSL] Enhanced Konfiguration geladen:");
     console.log(`   Aktiviert: ${sslConfig.enabled}`);
     console.log(`   Methode: ${sslConfig.method}`);
     console.log(`   Domain: ${sslConfig.domain}`);
     console.log(`   Setup beim Start: ${sslConfig.setupOnStart}`);
+    console.log(`   Cloudflare Token: ${process.env.CLOUDFLARE_API_TOKEN ? 'Vorhanden' : 'Nicht gesetzt'}`);
 
     // SSL-Konfiguration in this.config übernehmen
     this.config.security.requireHttps = sslConfig.enabled;
@@ -326,22 +328,14 @@ class DatabaseBackupTool {
     }
 
     try {
-      // SSL-Setup ausführen wenn aktiviert
-      console.log("🔐 [SSL] Führe automatisches SSL-Setup aus...");
+      console.log("🔐 [SSL] Führe automatisches Enhanced SSL-Setup aus...");
+      
+      // Enhanced SSL Manager initialisieren
+      await this.initializeSSL();
 
-      // Prüfe ob SSL-Setup Script existiert
-      const sslSetupPath = path.join(__dirname, "ssl-setup.sh");
-      if (!fs.existsSync(sslSetupPath)) {
-        console.log("🔐 [SSL] ssl-setup.sh nicht gefunden, erstelle es...");
-        await this.createSSLSetupScript();
-      }
-
-      // Führe SSL-Setup aus
-      await this.runSSLSetup(sslConfig);
-
-      console.log("✅ [SSL] Automatisches SSL-Setup abgeschlossen");
+      console.log("✅ [SSL] Automatisches Enhanced SSL-Setup abgeschlossen");
     } catch (error) {
-      console.error("❌ [SSL] SSL-Setup fehlgeschlagen:", error.message);
+      console.error("❌ [SSL] Enhanced SSL-Setup fehlgeschlagen:", error.message);
       console.log("⚠️ [SSL] Verwende HTTP als Fallback");
       this.config.security.requireHttps = false;
       this.securityConfig.requireHttps = false;
@@ -2065,7 +2059,7 @@ fi
     );
 
     // ====== SSL-ROUTEN ======
-    this.setupSSLRoutes();
+    this.setupEnhancedSSLRoutes();
 
     // ====== BACKUP UND SYSTEM ROUTEN ======
 
@@ -2761,6 +2755,211 @@ fi
     );
 
     console.log("✅ [SSL ROUTES] SSL-API-Routen erfolgreich konfiguriert");
+  }
+
+  setupEnhancedSSLRoutes() {
+    console.log("🔐 [SSL ROUTES] Initialisiere Enhanced SSL-API-Routen...");
+
+    // Enhanced SSL Status with Browser Compatibility
+    this.app.get(
+      "/api/ssl-status",
+      this.authMiddleware.bind(this),
+      async (req, res) => {
+        try {
+          if (!this.sslManager) {
+            return res.json({
+              enabled: false,
+              reason: "Enhanced SSL Manager nicht initialisiert",
+            });
+          }
+
+          const status = await this.sslManager.getStatus();
+          res.json(status);
+        } catch (error) {
+          console.error("❌ [SSL] Enhanced Status-Abfrage fehlgeschlagen:", error);
+          res
+            .status(500)
+            .json({
+              error:
+                "Enhanced SSL Status konnte nicht abgerufen werden: " + error.message,
+            });
+        }
+      }
+    );
+
+    // Enhanced SSL Certificate Renewal with Browser Compatibility Fix
+    this.app.post(
+      "/api/ssl-renew",
+      this.authMiddleware.bind(this),
+      async (req, res) => {
+        if (req.user.role !== "admin") {
+          return res
+            .status(403)
+            .json({ error: "Admin-Berechtigung erforderlich" });
+        }
+
+        try {
+          if (!this.sslManager) {
+            return res
+              .status(500)
+              .json({ error: "Enhanced SSL Manager nicht verfügbar" });
+          }
+
+          console.log(
+            `🔄 [SSL] Enhanced manuelle Erneuerung durch: ${req.user.username}`
+          );
+          const result = await this.sslManager.obtainCertificate();
+
+          res.json({
+            message: "Enhanced SSL-Zertifikat erfolgreich erneuert",
+            domain: result.domain,
+            method: result.method,
+            expiresIn: result.expiresIn,
+            browserCompatible: result.browserCompatible,
+            keyUsageFixed: result.keyUsageFixed
+          });
+        } catch (error) {
+          console.error(
+            "❌ [SSL] Enhanced manuelle Erneuerung fehlgeschlagen:",
+            error.message
+          );
+          res
+            .status(500)
+            .json({ error: "Enhanced SSL-Erneuerung fehlgeschlagen: " + error.message });
+        }
+      }
+    );
+
+    // Browser Compatibility Check
+    this.app.get(
+      "/api/ssl-browser-compatibility",
+      this.authMiddleware.bind(this),
+      async (req, res) => {
+        try {
+          if (!this.sslManager) {
+            return res.json({
+              compatible: false,
+              reason: "SSL Manager nicht verfügbar",
+            });
+          }
+
+          const keyUsageCheck = await this.sslManager.validateKeyUsage();
+          const status = await this.sslManager.getStatus();
+
+          res.json({
+            browserCompatibility: status.browserCompatibility,
+            keyUsageInfo: status.keyUsageInfo,
+            issues: keyUsageCheck.issues || [],
+            recommendations: keyUsageCheck.compatible ? 
+              ["Zertifikat ist browser-kompatibel"] : 
+              ["Zertifikat sollte für Browser-Kompatibilität erneuert werden"]
+          });
+        } catch (error) {
+          console.error("❌ [SSL] Browser-Kompatibilitäts-Check fehlgeschlagen:", error);
+          res
+            .status(500)
+            .json({
+              error: "Browser-Kompatibilitäts-Check fehlgeschlagen: " + error.message,
+            });
+        }
+      }
+    );
+
+    // Cloudflare Setup Guide
+    this.app.get(
+      "/api/ssl-cloudflare-guide",
+      this.authMiddleware.bind(this),
+      (req, res) => {
+        res.json({
+          title: "Cloudflare Origin Certificate Setup",
+          description: "Schritt-für-Schritt Anleitung für Cloudflare Origin Certificates",
+          requirements: [
+            "Cloudflare Account mit aktiver Domain",
+            "API Token mit Zone:Read Berechtigung",
+            "Domain muss über Cloudflare proxied werden"
+          ],
+          steps: [
+            {
+              step: 1,
+              title: "API Token erstellen",
+              description: "Gehe zu https://dash.cloudflare.com/profile/api-tokens",
+              details: [
+                "Klicke 'Create Token'",
+                "Wähle 'Custom token'",
+                "Berechtigung: Zone:Read, Zone:Zone:Read",
+                "Zone Resources: Include - All zones"
+              ]
+            },
+            {
+              step: 2,
+              title: "Umgebungsvariable setzen",
+              description: "Setze CLOUDFLARE_API_TOKEN in den Pterodactyl Umgebungsvariablen"
+            },
+            {
+              step: 3,
+              title: "SSL-Methode konfigurieren",
+              description: "Setze SSL_METHOD=cloudflare"
+            },
+            {
+              step: 4,
+              title: "Domain konfigurieren",
+              description: "Setze SSL_DOMAIN auf deine Cloudflare-Domain"
+            },
+            {
+              step: 5,
+              title: "Server neu starten",
+              description: "Starte den Server neu, um die Konfiguration zu laden"
+            }
+          ],
+          troubleshooting: [
+            {
+              issue: "Zone ID nicht gefunden",
+              solution: "Stelle sicher, dass die Domain in Cloudflare vorhanden ist und der API Token Zugriff hat"
+            },
+            {
+              issue: "API Token ungültig",
+              solution: "Überprüfe die Token-Berechtigung und erstelle ggf. einen neuen Token"
+            }
+          ],
+          environment_variables: {
+            CLOUDFLARE_API_TOKEN: "Dein Cloudflare API Token",
+            SSL_METHOD: "cloudflare",
+            SSL_DOMAIN: "deine-domain.com",
+            SSL_AUTO_RENEWAL: "true"
+          }
+        });
+      }
+    );
+
+    // SSL Troubleshooting Endpoint
+    this.app.get(
+      "/api/ssl-troubleshooting",
+      this.authMiddleware.bind(this),
+      (req, res) => {
+        try {
+          if (!this.sslManager) {
+            return res.json({ error: "SSL Manager nicht verfügbar" });
+          }
+
+          const troubleshooting = this.sslManager.getTroubleshootingGuide();
+          res.json(troubleshooting);
+        } catch (error) {
+          console.error(
+            "❌ [SSL] Troubleshooting-Guide konnte nicht generiert werden:",
+            error
+          );
+          res
+            .status(500)
+            .json({
+              error:
+                "SSL Troubleshooting-Guide konnte nicht generiert werden: " +
+                error.message,
+            });
+        }
+      }
+    );
+
+    console.log("✅ [SSL ROUTES] Enhanced SSL-API-Routen erfolgreich konfiguriert");
   }
   // ====== GIT BACKUP FUNKTIONEN ======
 
@@ -4123,14 +4322,14 @@ fi
   async displaySSLStatus() {
     try {
       if (!this.sslManager) {
-        console.log("🔐 SSL Manager nicht verfügbar");
+        console.log("🔐 Enhanced SSL Manager nicht verfügbar");
         return;
       }
 
       const status = await this.sslManager.getStatus();
 
       console.log("🔐 ===============================================");
-      console.log("🔐 SSL CERTIFICATE STATUS");
+      console.log("🔐 ENHANCED SSL CERTIFICATE STATUS");
       console.log("🔐 ===============================================");
       console.log(`🔒 SSL aktiviert: ${status.enabled ? "✅ Ja" : "❌ Nein"}`);
 
@@ -4145,12 +4344,50 @@ fi
           }`
         );
 
+        // Enhanced Browser Compatibility Status
+        console.log("🌐 ===============================================");
+        console.log("🌐 BROWSER COMPATIBILITY STATUS");
+        console.log("🌐 ===============================================");
+        if (status.browserCompatibility) {
+          console.log(`🌐 Chrome: ${status.browserCompatibility.chrome ? "✅ Kompatibel" : "❌ Inkompatibel"}`);
+          console.log(`🌐 Firefox: ${status.browserCompatibility.firefox ? "✅ Kompatibel" : "❌ Inkompatibel"}`);
+          console.log(`🌐 Safari: ${status.browserCompatibility.safari ? "✅ Kompatibel" : "❌ Inkompatibel"}`);
+          console.log(`🌐 Edge: ${status.browserCompatibility.edge ? "✅ Kompatibel" : "❌ Inkompatibel"}`);
+          
+          if (status.browserCompatibility.issues && status.browserCompatibility.issues.length > 0) {
+            console.log("⚠️ Browser-Kompatibilitätsprobleme:");
+            status.browserCompatibility.issues.forEach(issue => {
+              console.log(`   - ${issue}`);
+            });
+          }
+        }
+
+        // KeyUsage Information
+        if (status.keyUsageInfo) {
+          console.log("🔐 ===============================================");
+          console.log("🔐 KEY USAGE INFORMATION");
+          console.log("🔐 ===============================================");
+          console.log(`🔑 Digital Signature: ${status.keyUsageInfo.hasDigitalSignature ? "✅ Vorhanden" : "❌ Fehlt"}`);
+          console.log(`🔑 Key Encipherment: ${status.keyUsageInfo.hasKeyEncipherment ? "✅ Vorhanden" : "❌ Fehlt"}`);
+          console.log(`🔑 Server Auth: ${status.keyUsageInfo.hasServerAuth ? "✅ Vorhanden" : "❌ Fehlt"}`);
+          console.log(`🔑 Browser-Kompatibel: ${status.keyUsageInfo.compatible ? "✅ Ja" : "❌ Nein"}`);
+        }
+
         if (status.needsRenewal) {
           console.log(`⚠️ Erneuerung erforderlich: Ja`);
         }
 
+        if (status.needsUpdate) {
+          console.log(`🔄 Browser-Kompatibilitäts-Update erforderlich: Ja`);
+        }
+
         if (status.method === "selfsigned") {
-          console.log(`⚠️ Self-Signed: Browser zeigen Sicherheitswarnung`);
+          console.log(`⚠️ Self-Signed: Browser zeigen möglicherweise Sicherheitswarnung`);
+          console.log(`✅ Enhanced KeyUsage: ERR_SSL_KEY_USAGE_INCOMPATIBLE Problem behoben`);
+        }
+
+        if (status.method === "cloudflare") {
+          console.log(`🌐 Cloudflare Origin Certificate: Optimiert für Cloudflare Proxy`);
         }
 
         // Zusätzliche SSL-Informationen
@@ -4177,7 +4414,7 @@ fi
       console.log("===============================================");
     } catch (error) {
       console.error(
-        "❌ [SSL] Fehler beim Anzeigen des SSL-Status:",
+        "❌ [SSL] Fehler beim Anzeigen des Enhanced SSL-Status:",
         error.message
       );
     }

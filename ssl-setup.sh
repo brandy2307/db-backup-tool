@@ -1,6 +1,6 @@
 #!/bin/bash
-# Enhanced SSL-Setup Script für Database Backup Tool
-# Erweiterte SSL-Generierung mit besserer Fehlerbehandlung und Validierung
+# Enhanced SSL-Setup Script für Database Backup Tool - FIXED VERSION
+# Erweiterte SSL-Generierung mit besserer Fehlerbehandlung und Kompatibilität für moderne Browser
 
 set -e
 
@@ -39,7 +39,7 @@ log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
 log_error() { log "ERROR" "$@"; }
 
-echo -e "${BLUE}🔐 Enhanced SSL-Setup für Database Backup Tool${NC}"
+echo -e "${BLUE}🔐 Enhanced SSL-Setup für Database Backup Tool - FIXED VERSION${NC}"
 echo "============================================="
 echo -e "${BLUE}Script-Verzeichnis:${NC} $SCRIPT_DIR"
 echo -e "${BLUE}SSL-Verzeichnis:${NC} $SSL_DIR"
@@ -138,20 +138,21 @@ validate_domain() {
     log_info "✅ Domain-Validierung erfolgreich"
 }
 
-# Self-Signed Zertifikat mit erweiterten Optionen
+# Self-Signed Zertifikat mit korrekter KeyUsage (FIXED)
 create_selfsigned_cert() {
-    log_info "Erstelle Self-Signed Zertifikat..."
+    log_info "Erstelle Self-Signed Zertifikat mit korrekter KeyUsage..."
     
     local cert_file="$SSL_DIR/fullchain.pem"
     local key_file="$SSL_DIR/privkey.pem"
     local config_file="$SSL_DIR/openssl.cnf"
     
-    # OpenSSL-Konfiguration erstellen
+    # OpenSSL-Konfiguration mit korrekter KeyUsage für moderne Browser
     cat > "$config_file" << EOF
 [req]
 distinguished_name = req_distinguished_name
 req_extensions = v3_req
 prompt = no
+x509_extensions = v3_ca
 
 [req_distinguished_name]
 C = DE
@@ -161,31 +162,139 @@ O = DB Backup Tool
 CN = $DOMAIN
 
 [v3_req]
-keyUsage = keyEncipherment, dataEncipherment
-extendedKeyUsage = serverAuth
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = @alt_names
+
+[v3_ca]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth, clientAuth
 subjectAltName = @alt_names
 
 [alt_names]
 DNS.1 = $DOMAIN
 DNS.2 = *.${DOMAIN}
 DNS.3 = localhost
+DNS.4 = *.localhost
 IP.1 = 127.0.0.1
 IP.2 = ::1
+IP.3 = 0.0.0.0
 EOF
 
-    # Zertifikat erstellen
+    # Zertifikat erstellen mit korrekter KeyUsage
     openssl req -x509 -newkey rsa:$KEY_SIZE \
         -keyout "$key_file" \
         -out "$cert_file" \
         -days $CERT_VALIDITY \
         -nodes \
         -config "$config_file" \
-        -extensions v3_req
+        -extensions v3_ca
     
     # Aufräumen
     rm -f "$config_file"
     
-    log_info "✅ Self-Signed Zertifikat erstellt"
+    # Validierung des erstellten Zertifikats
+    if openssl x509 -in "$cert_file" -text -noout | grep -q "digitalSignature"; then
+        log_info "✅ Self-Signed Zertifikat mit korrekter KeyUsage erstellt"
+        log_info "🔍 KeyUsage: digitalSignature, keyEncipherment, nonRepudiation"
+        log_info "🔍 ExtKeyUsage: serverAuth, clientAuth"
+    else
+        log_error "❌ Zertifikat hat nicht die korrekte KeyUsage"
+        return 1
+    fi
+}
+
+# Cloudflare Origin Certificate (IMPLEMENTED)
+create_cloudflare_cert() {
+    log_info "Erstelle Cloudflare Origin Zertifikat..."
+    
+    if [ -z "$CLOUDFLARE_TOKEN" ]; then
+        log_error "CLOUDFLARE_API_TOKEN ist erforderlich für Cloudflare-Methode"
+        log_info "Setze die Umgebungsvariable CLOUDFLARE_API_TOKEN"
+        return 1
+    fi
+    
+    # Cloudflare Zone ID ermitteln
+    log_info "Ermittle Cloudflare Zone ID für Domain: $DOMAIN"
+    
+    # Extrahiere Root-Domain aus der Domain
+    local root_domain
+    if [[ "$DOMAIN" == *.* ]]; then
+        # Für Subdomains (z.B. app.example.com -> example.com)
+        root_domain=$(echo "$DOMAIN" | rev | cut -d'.' -f1,2 | rev)
+    else
+        root_domain="$DOMAIN"
+    fi
+    
+    local zone_response
+    zone_response=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${root_domain}" \
+        -H "Authorization: Bearer $CLOUDFLARE_TOKEN" \
+        -H "Content-Type: application/json")
+    
+    if [ $? -ne 0 ]; then
+        log_error "Fehler beim Abrufen der Cloudflare Zone ID"
+        return 1
+    fi
+    
+    local zone_id
+    zone_id=$(echo "$zone_response" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+    
+    if [ -z "$zone_id" ]; then
+        log_error "Zone ID für Domain $root_domain nicht gefunden"
+        log_error "Zone Response: $zone_response"
+        log_info "Stelle sicher, dass:"
+        log_info "  1. Die Domain $root_domain in Cloudflare vorhanden ist"
+        log_info "  2. Der API Token Zone:Read Berechtigung hat"
+        return 1
+    fi
+    
+    log_info "✅ Zone ID gefunden: $zone_id"
+    
+    # Hostnames für das Zertifikat
+    local hostnames="[\"$DOMAIN\"]"
+    if [ "$DOMAIN" != "$root_domain" ]; then
+        hostnames="[\"$DOMAIN\", \"$root_domain\"]"
+    fi
+    
+    # Origin Certificate erstellen
+    log_info "Erstelle Origin Certificate für: $hostnames"
+    
+    local cert_response
+    cert_response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/certificates" \
+        -H "Authorization: Bearer $CLOUDFLARE_TOKEN" \
+        -H "Content-Type: application/json" \
+        --data '{
+            "hostnames": '"$hostnames"',
+            "requested_validity": '"$CERT_VALIDITY"',
+            "request_type": "origin-rsa",
+            "csr": ""
+        }')
+    
+    if [ $? -ne 0 ]; then
+        log_error "Fehler bei der Erstellung des Origin Certificates"
+        return 1
+    fi
+    
+    # Zertifikat und Private Key extrahieren
+    local certificate
+    local private_key
+    
+    certificate=$(echo "$cert_response" | grep -o '"certificate":"[^"]*' | cut -d'"' -f4 | sed 's/\\n/\n/g')
+    private_key=$(echo "$cert_response" | grep -o '"private_key":"[^"]*' | cut -d'"' -f4 | sed 's/\\n/\n/g')
+    
+    if [ -z "$certificate" ] || [ -z "$private_key" ]; then
+        log_error "Konnte Zertifikat oder Private Key nicht extrahieren"
+        log_error "API Response: $cert_response"
+        return 1
+    fi
+    
+    # Zertifikat-Dateien schreiben
+    echo "$certificate" > "$SSL_DIR/fullchain.pem"
+    echo "$private_key" > "$SSL_DIR/privkey.pem"
+    
+    log_info "✅ Cloudflare Origin Zertifikat erfolgreich erstellt"
 }
 
 # Let's Encrypt mit erweiterten Optionen
@@ -240,61 +349,6 @@ create_letsencrypt_cert() {
         log_error "Let's Encrypt Zertifikat-Verzeichnis nicht gefunden"
         return 1
     fi
-}
-
-# Cloudflare Origin Certificate
-create_cloudflare_cert() {
-    log_info "Erstelle Cloudflare Origin Zertifikat..."
-    
-    if [ -z "$CLOUDFLARE_TOKEN" ]; then
-        log_error "CLOUDFLARE_API_TOKEN ist erforderlich"
-        return 1
-    fi
-    
-    # Cloudflare Plugin installieren
-    if ! certbot plugins | grep -q cloudflare; then
-        log_info "Installiere Cloudflare Plugin..."
-        
-        if command -v apt-get &> /dev/null; then
-            apt-get install -y python3-certbot-dns-cloudflare
-        elif command -v yum &> /dev/null; then
-            yum install -y python3-certbot-dns-cloudflare
-        else
-            pip3 install certbot-dns-cloudflare
-        fi
-    fi
-    
-    # Credentials-Datei erstellen
-    local creds_file="$SSL_DIR/.cloudflare-credentials"
-    cat > "$creds_file" << EOF
-dns_cloudflare_api_token = $CLOUDFLARE_TOKEN
-EOF
-    chmod 600 "$creds_file"
-    
-    # Certbot mit Cloudflare ausführen
-    certbot certonly \
-        --dns-cloudflare \
-        --dns-cloudflare-credentials "$creds_file" \
-        --non-interactive \
-        --agree-tos \
-        --email "$EMAIL" \
-        --domains "$DOMAIN" \
-        --key-type rsa \
-        --rsa-key-size $KEY_SIZE
-    
-    # Zertifikate kopieren
-    local letsencrypt_path="/etc/letsencrypt/live/$DOMAIN"
-    if [ -d "$letsencrypt_path" ]; then
-        cp "$letsencrypt_path/fullchain.pem" "$SSL_DIR/fullchain.pem"
-        cp "$letsencrypt_path/privkey.pem" "$SSL_DIR/privkey.pem"
-        log_info "✅ Cloudflare Origin Zertifikat erstellt"
-    else
-        log_error "Cloudflare Zertifikat-Verzeichnis nicht gefunden"
-        return 1
-    fi
-    
-    # Credentials aufräumen
-    rm -f "$creds_file"
 }
 
 # Manuelle Zertifikat-Validierung
@@ -355,7 +409,7 @@ set_file_permissions() {
     log_info "✅ Dateiberechtigungen gesetzt"
 }
 
-# Zertifikat-Informationen anzeigen
+# Zertifikat-Informationen anzeigen mit KeyUsage-Check
 display_cert_info() {
     log_info "Zeige Zertifikat-Informationen..."
     
@@ -370,6 +424,29 @@ display_cert_info() {
             echo -e "${BLUE}$line${NC}"
         done
         
+        # KeyUsage prüfen
+        echo -e "\n${GREEN}🔍 KeyUsage-Analyse:${NC}"
+        local key_usage=$(openssl x509 -in "$cert_file" -text -noout | grep -A1 "Key Usage:")
+        if echo "$key_usage" | grep -q "Digital Signature"; then
+            echo -e "${GREEN}✅ Digital Signature: Vorhanden${NC}"
+        else
+            echo -e "${RED}❌ Digital Signature: Fehlt${NC}"
+        fi
+        
+        if echo "$key_usage" | grep -q "Key Encipherment"; then
+            echo -e "${GREEN}✅ Key Encipherment: Vorhanden${NC}"
+        else
+            echo -e "${RED}❌ Key Encipherment: Fehlt${NC}"
+        fi
+        
+        # Extended Key Usage prüfen
+        local ext_key_usage=$(openssl x509 -in "$cert_file" -text -noout | grep -A1 "Extended Key Usage:")
+        if echo "$ext_key_usage" | grep -q "TLS Web Server Authentication"; then
+            echo -e "${GREEN}✅ Server Authentication: Vorhanden${NC}"
+        else
+            echo -e "${YELLOW}⚠️ Server Authentication: Fehlt${NC}"
+        fi
+        
         # Gültigkeitsprüfung
         local expiry_date=$(openssl x509 -in "$cert_file" -enddate -noout | cut -d= -f2)
         local days_until_expiry=$(( ($(date -d "$expiry_date" +%s) - $(date +%s)) / 86400 ))
@@ -382,11 +459,22 @@ display_cert_info() {
             echo -e "  ${YELLOW}⚠️ Erneuerung empfohlen${NC}"
         fi
         
+        # Browser-Kompatibilität
+        echo -e "\n${GREEN}🌐 Browser-Kompatibilität:${NC}"
+        if echo "$key_usage" | grep -q "Digital Signature" && echo "$ext_key_usage" | grep -q "TLS Web Server Authentication"; then
+            echo -e "  ${GREEN}✅ Chrome/Edge: Kompatibel${NC}"
+            echo -e "  ${GREEN}✅ Firefox: Kompatibel${NC}"
+            echo -e "  ${GREEN}✅ Safari: Kompatibel${NC}"
+        else
+            echo -e "  ${RED}❌ Chrome/Edge: ERR_SSL_KEY_USAGE_INCOMPATIBLE möglich${NC}"
+            echo -e "  ${YELLOW}⚠️ Firefox: Eventuell Probleme${NC}"
+        fi
+        
         echo "================================="
     fi
 }
 
-# Auto-Renewal Setup
+# Auto-Renewal Setup mit Cloudflare-Support
 setup_auto_renewal() {
     if [ "$AUTO_RENEWAL" = "true" ] && [ "$METHOD" != "selfsigned" ] && [ "$METHOD" != "manual" ]; then
         log_info "Richte Auto-Renewal ein..."
@@ -451,7 +539,7 @@ cleanup_old_files() {
 
 # Hauptfunktion
 main() {
-    log_info "Starte Enhanced SSL-Setup..."
+    log_info "Starte Enhanced SSL-Setup mit Browser-Kompatibilitäts-Fix..."
     
     # Präparation
     check_dependencies
@@ -500,3 +588,9 @@ echo -e "${BLUE}Zertifikate verfügbar unter: $SSL_DIR${NC}"
 if [ -d "$BACKUP_DIR" ]; then
     echo -e "${BLUE}Backup der alten Zertifikate: $BACKUP_DIR${NC}"
 fi
+
+# Browser-Kompatibilitäts-Info
+echo -e "\n${GREEN}🌐 BROWSER-KOMPATIBILITÄT:${NC}"
+echo -e "${GREEN}✅ Modernes KeyUsage für Chrome/Edge implementiert${NC}"
+echo -e "${GREEN}✅ ERR_SSL_KEY_USAGE_INCOMPATIBLE Problem behoben${NC}"
+echo -e "${GREEN}✅ Cloudflare Origin Certificate Support hinzugefügt${NC}"
