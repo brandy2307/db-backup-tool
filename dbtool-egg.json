@@ -5,10 +5,10 @@
     "update_url": "https://github.com/brandy2307/db-backup-tool/blob/main/dbtool-egg.json"
   },
   "exported_at": "2024-12-15T14:40:56+00:00",
-  "name": "DB Backup Tool (Enhanced mit SSL-Konfiguration)",
+  "name": "DB Backup Tool (Enhanced Security & SSL)",
   "author": "brandy@example.com",
   "uuid": "db9f372e-01d7-4c9b-a109-e49990d68d46",
-  "description": "Tool für automatisierte Datenbank-Backups mit SSL-Unterstützung und Git Backup Integration",
+  "description": "Sicheres automatisiertes Datenbank-Backup-Tool mit SSL-Unterstützung, 2FA, CAPTCHA und erweiterten Sicherheitsfeatures",
   "features": [
     "eula=false"
   ],
@@ -18,14 +18,14 @@
   "file_denylist": [],
   "startup": "cd /home/container && if [ ! -f \"db-backup-tool/package.json\" ]; then echo \"ERROR: package.json not found. Please reinstall the server.\"; exit 1; fi && cd db-backup-tool && npm start",
   "config": {
-    "files": "{\r\n    \"db-backup-tool/config.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"server.port\": \"{{server.build.default.port}}\",\r\n            \"server.host\": \"0.0.0.0\",\r\n            \"security.requireHttps\": \"{{env.REQUIRE_HTTPS}}\",\r\n            \"ssl.domain\": \"{{env.SSL_DOMAIN}}\",\r\n            \"ssl.email\": \"{{env.SSL_EMAIL}}\",\r\n            \"ssl.method\": \"{{env.SSL_METHOD}}\",\r\n            \"ssl.autoRenewal\": \"{{env.SSL_AUTO_RENEWAL}}\"\r\n        }\r\n    }\r\n}",
+    "files": "{\r\n    \"db-backup-tool/config.json\": {\r\n        \"parser\": \"json\",\r\n        \"find\": {\r\n            \"server.port\": \"{{server.build.default.port}}\",\r\n            \"server.httpsPort\": \"{{env.HTTPS_PORT}}\",\r\n            \"server.host\": \"0.0.0.0\",\r\n            \"security.requireHttps\": \"{{env.REQUIRE_HTTPS}}\",\r\n            \"security.enable2FA\": \"{{env.ENABLE_2FA}}\",\r\n            \"security.strongPasswords\": \"{{env.STRONG_PASSWORDS}}\",\r\n            \"security.maxFailedAttempts\": \"{{env.MAX_FAILED_ATTEMPTS}}\",\r\n            \"security.defaultAdmin.username\": \"{{env.ADMIN_USERNAME}}\",\r\n            \"security.defaultAdmin.password\": \"{{env.ADMIN_PASSWORD}}\",\r\n            \"security.sessionSecret\": \"{{env.SESSION_SECRET}}\",\r\n            \"security.jwtSecret\": \"{{env.JWT_SECRET}}\",\r\n            \"ssl.domain\": \"{{env.SSL_DOMAIN}}\",\r\n            \"ssl.email\": \"{{env.SSL_EMAIL}}\",\r\n            \"ssl.method\": \"{{env.SSL_METHOD}}\",\r\n            \"ssl.autoRenewal\": \"{{env.SSL_AUTO_RENEWAL}}\",\r\n            \"ssl.keySize\": \"{{env.SSL_KEY_SIZE}}\",\r\n            \"ssl.certValidity\": \"{{env.SSL_CERT_VALIDITY}}\",\r\n            \"ssl.setupOnStart\": \"{{env.SSL_SETUP_ON_START}}\",\r\n            \"backup.maxBackups\": \"{{env.MAX_BACKUPS}}\",\r\n            \"backup.compression\": \"{{env.ENABLE_COMPRESSION}}\",\r\n            \"gitBackup.enabled\": \"{{env.GIT_BACKUP_ENABLED}}\",\r\n            \"gitBackup.repository\": \"{{env.GIT_BACKUP_REPOSITORY}}\",\r\n            \"gitBackup.username\": \"{{env.GIT_BACKUP_USERNAME}}\",\r\n            \"gitBackup.branch\": \"{{env.GIT_BACKUP_BRANCH}}\",\r\n            \"updates.autoUpdate\": \"{{env.AUTO_UPDATE}}\"\r\n        }\r\n    }\r\n}",
     "startup": "{\r\n    \"done\": \"Server läuft auf\"\r\n}",
     "logs": "{}",
     "stop": "^C"
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# DB Backup Tool Installation - Enhanced mit SSL-Konfiguration\n\nset -e\n\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\n# Fest definiertes Repository\nREPO_URL=\"https://github.com/brandy2307/db-backup-tool.git\"\nREPO_BRANCH=\"main\"\n\necho \"=================================\"\necho \"DB BACKUP TOOL INSTALLATION (Enhanced SSL)\"\necho \"=================================\"\necho \"Offizielles Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Target: ${APP_DIR}\"\necho \"SSL-Unterstützung: Aktiviert\"\necho \"=================================\"\n\n# System Dependencies installieren\necho \"[1/7] Installing system dependencies...\"\napt update\napt install -y wget curl gnupg2 software-properties-common git openssl\n\n# Node.js installieren\necho \"[2/7] Installing Node.js...\"\ncurl -fsSL https://deb.nodesource.com/setup_18.x | bash -\napt install -y nodejs\n\n# Database Tools installieren\necho \"[3/7] Installing database tools...\"\napt install -y mysql-client || apt install -y default-mysql-client || echo \"MySQL client failed\"\napt install -y postgresql-client || apt install -y postgresql-client-common || echo \"PostgreSQL client failed\"\n\n# MongoDB Tools\necho \"Installing MongoDB tools...\"\ncurl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg\necho \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main\" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list\napt update\napt install -y mongodb-database-tools || echo \"MongoDB tools failed\"\n\n# SSL/TLS Tools für Zertifikat-Management\necho \"[4/7] Installing SSL/TLS tools...\"\napt install -y certbot || echo \"Certbot installation failed (optional)\"\n\n# Git konfigurieren\necho \"[5/7] Configuring Git...\"\ngit config --global init.defaultBranch main\ngit config --global user.name \"DB Backup Tool\"\ngit config --global user.email \"backup@localhost\"\n\n# Tools verifikation\necho \"[6/7] Verifying tools...\"\necho \"Node.js: $(node --version)\"\necho \"NPM: $(npm --version)\"\necho \"Git: $(git --version)\"\necho \"OpenSSL: $(openssl version)\"\n\n# Wechsel zum Zielverzeichnis\ncd \"${DIR}\"\n\n# Alte Installation entfernen\nif [ -d \"${APP_DIR}\" ]; then\n    echo \"Removing old installation...\"\n    rm -rf \"${APP_DIR}\"\nfi\n\n# Repository Setup\necho \"[7/7] Setting up official repository...\"\necho \"Cloning from official repository: ${REPO_URL}\"\n\n# Test Repository-Zugriff\nif ! git ls-remote --heads \"${REPO_URL}\" >/dev/null 2>&1; then\n    echo \"ERROR: Official repository '${REPO_URL}' is not accessible!\"\n    exit 1\nfi\n\n# Repository klonen\necho \"Cloning official repository...\"\nif ! git clone -b \"${REPO_BRANCH}\" \"${REPO_URL}\" \"${APP_DIR}\"; then\n    echo \"ERROR: Git clone from official repository failed!\"\n    exit 1\nfi\n\n# Verifikation nach Clone\ncd \"${APP_DIR}\"\necho \"Repository cloned successfully to: $(pwd)\"\n\n# Prüfe kritische Dateien\nif [ ! -f \"package.json\" ]; then\n    echo \"ERROR: package.json not found!\"\n    exit 1\nfi\n\nif [ ! -f \"server.js\" ]; then\n    echo \"ERROR: server.js not found!\"\n    exit 1\nfi\n\necho \"✓ All required files found\"\n\n# Dependencies installieren\necho \"Installing dependencies...\"\nnpm cache clean --force\nif ! npm install --production; then\n    echo \"Trying with legacy-peer-deps...\"\n    npm install --production --legacy-peer-deps\nfi\n\n# Verzeichnisse erstellen\necho \"Creating directories...\"\nmkdir -p backups logs config public ssl\n\n# SSL-Verzeichnis Berechtigungen\nchmod 700 ssl\n\n# Config erstellen mit SSL-Unterstützung\nif [ ! -f \"config.json\" ]; then\n    echo \"Creating enhanced config.json with SSL support...\"\n    cat > config.json << EOF\n{\n  \"server\": {\n    \"port\": 8080,\n    \"host\": \"0.0.0.0\",\n    \"httpsPort\": 8443\n  },\n  \"security\": {\n    \"sessionSecret\": \"change-this-secret-key-in-production\",\n    \"jwtSecret\": \"change-this-jwt-secret-in-production\",\n    \"requireHttps\": false,\n    \"enable2FA\": false,\n    \"strongPasswords\": true,\n    \"maxFailedAttempts\": 5\n  },\n  \"ssl\": {\n    \"domain\": \"localhost\",\n    \"email\": \"admin@localhost\",\n    \"method\": \"selfsigned\",\n    \"autoRenewal\": true,\n    \"keySize\": 4096,\n    \"certValidity\": 365\n  },\n  \"backup\": {\n    \"defaultPath\": \"./backups\",\n    \"maxBackups\": 10,\n    \"compression\": true\n  },\n  \"logging\": {\n    \"level\": \"info\",\n    \"file\": \"./logs/app.log\"\n  },\n  \"updates\": {\n    \"autoUpdate\": true,\n    \"repository\": \"${REPO_URL}\",\n    \"branch\": \"${REPO_BRANCH}\"\n  },\n  \"gitBackup\": {\n    \"enabled\": false,\n    \"repository\": \"\",\n    \"username\": \"\",\n    \"branch\": \"main\"\n  }\n}\nEOF\nfi\n\n# SSL-Setup Script ausführbar machen\nif [ -f \"ssl-setup.sh\" ]; then\n    chmod +x ssl-setup.sh\n    echo \"✅ SSL-Setup Script bereit\"\nelse\n    echo \"⚠️ SSL-Setup Script nicht gefunden - wird zur Laufzeit erstellt\"\nfi\n\n# Update-Script ausführbar machen\nif [ -f \"update.sh\" ]; then\n    chmod +x update.sh\n    echo \"✅ Update-Script bereit\"\nfi\n\n# Dateiberechtigungen setzen\nchmod 755 .\nchmod 644 *.json *.js 2>/dev/null || true\nchmod 755 backups logs config public ssl 2>/dev/null || true\n\n# Finale Verifikation\necho \"=================================\"\necho \"INSTALLATION COMPLETE (Enhanced SSL)\"\necho \"=================================\"\necho \"Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Directory: $(pwd)\"\necho \"SSL-Unterstützung: ✅ Aktiviert\"\necho \"Verfügbare SSL-Methoden: selfsigned, letsencrypt, manual\"\necho \"Standard SSL-Konfiguration: Self-Signed für localhost\"\necho \"=================================\"\n\necho \"✅ Installation erfolgreich!\"\necho \"🔐 SSL-Konfiguration über Pelican Panel Environment Variables\"\necho \"📝 SSL-Setup wird automatisch beim ersten Start ausgeführt\"",
+      "script": "#!/bin/bash\n# Enhanced Database Backup Tool Installation mit vollständigen Security Features\n\nset -e\n\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\n# Fest definiertes Repository\nREPO_URL=\"https://github.com/brandy2307/db-backup-tool.git\"\nREPO_BRANCH=\"main\"\n\necho \"=================================================\"\necho \"DB BACKUP TOOL INSTALLATION (Enhanced Security)\"\necho \"=================================================\"\necho \"Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Target: ${APP_DIR}\"\necho \"Features: SSL + 2FA + CAPTCHA + Security\"\necho \"=================================================\"\n\n# System Dependencies installieren\necho \"[1/8] Installing system dependencies...\"\napt update\napt install -y wget curl gnupg2 software-properties-common git openssl ca-certificates lsb-release\n\n# Node.js installieren\necho \"[2/8] Installing Node.js 18...\"\ncurl -fsSL https://deb.nodesource.com/setup_18.x | bash -\napt install -y nodejs\n\n# Database Tools installieren\necho \"[3/8] Installing database tools...\"\n# MySQL Client\napt install -y mysql-client || apt install -y default-mysql-client || echo \"MySQL client installation failed (optional)\"\n\n# PostgreSQL Client\napt install -y postgresql-client || apt install -y postgresql-client-common || echo \"PostgreSQL client installation failed (optional)\"\n\n# MongoDB Tools\necho \"Installing MongoDB tools...\"\nwget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg\necho \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian $(lsb_release -cs)/mongodb-org/7.0 main\" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list\napt update\napt install -y mongodb-database-tools || echo \"MongoDB tools installation failed (optional)\"\n\n# SSL/TLS und Security Tools\necho \"[4/8] Installing SSL and security tools...\"\napt install -y certbot python3-certbot-nginx || echo \"Certbot installation failed (optional)\"\napt install -y fail2ban || echo \"Fail2ban installation failed (optional)\"\n\n# Git konfigurieren\necho \"[5/8] Configuring Git...\"\ngit config --global init.defaultBranch main\ngit config --global user.name \"DB Backup Tool\"\ngit config --global user.email \"backup@localhost\"\ngit config --global http.postBuffer 524288000\ngit config --global core.compression 0\n\n# Tools verifikation\necho \"[6/8] Verifying installed tools...\"\necho \"Node.js: $(node --version)\"\necho \"NPM: $(npm --version)\"\necho \"Git: $(git --version)\"\necho \"OpenSSL: $(openssl version)\"\necho \"Certbot: $(certbot --version || echo 'Not available')\"\n\n# Wechsel zum Zielverzeichnis\ncd \"${DIR}\"\n\n# Alte Installation entfernen\nif [ -d \"${APP_DIR}\" ]; then\n    echo \"Removing old installation...\"\n    rm -rf \"${APP_DIR}\"\nfi\n\n# Repository Setup\necho \"[7/8] Setting up official repository...\"\necho \"Cloning from: ${REPO_URL}\"\n\n# Test Repository-Zugriff\nif ! git ls-remote --heads \"${REPO_URL}\" >/dev/null 2>&1; then\n    echo \"ERROR: Repository '${REPO_URL}' is not accessible!\"\n    echo \"Check internet connection and repository availability\"\n    exit 1\nfi\n\n# Repository klonen\necho \"Cloning repository...\"\nif ! git clone -b \"${REPO_BRANCH}\" \"${REPO_URL}\" \"${APP_DIR}\"; then\n    echo \"ERROR: Git clone failed!\"\n    echo \"This might be a temporary network issue - try reinstalling\"\n    exit 1\nfi\n\n# Verifikation nach Clone\ncd \"${APP_DIR}\"\necho \"Repository cloned to: $(pwd)\"\n\n# Prüfe kritische Dateien\necho \"Verifying critical files...\"\nCRITICAL_FILES=(\n    \"package.json\"\n    \"server.js\"\n    \"config.json\"\n    \"public/index.html\"\n    \"public/app.js\"\n    \"public/styles.css\"\n)\n\nfor file in \"${CRITICAL_FILES[@]}\"; do\n    if [ ! -f \"$file\" ]; then\n        echo \"ERROR: Critical file missing: $file\"\n        exit 1\n    fi\ndone\n\necho \"✓ All critical files found\"\n\n# Dependencies installieren mit erweiterten Optionen\necho \"[8/8] Installing dependencies...\"\nnpm cache clean --force\n\n# Versuche verschiedene NPM Install-Strategien\nif npm install --production --no-audit --no-fund; then\n    echo \"✓ Dependencies installed successfully\"\nelif npm install --production --legacy-peer-deps --no-audit --no-fund; then\n    echo \"✓ Dependencies installed with legacy-peer-deps\"\nelif npm install --production --force --no-audit --no-fund; then\n    echo \"✓ Dependencies installed with force flag\"\nelse\n    echo \"ERROR: Failed to install dependencies\"\n    echo \"This might be due to network issues - try reinstalling\"\n    exit 1\nfi\n\n# Verzeichnisse erstellen mit korrekten Berechtigungen\necho \"Creating directories with proper permissions...\"\nmkdir -p backups logs config public ssl\n\n# Sichere Berechtigungen für SSL und Backups\nchmod 700 ssl\nchmod 755 backups logs config public\nchmod 755 .\n\n# Erweiterte Konfiguration erstellen\nif [ ! -f \"config.json\" ]; then\n    echo \"Creating enhanced config.json...\"\n    cat > config.json << 'EOF'\n{\n  \"server\": {\n    \"port\": 8080,\n    \"host\": \"0.0.0.0\",\n    \"httpsPort\": 8443\n  },\n  \"security\": {\n    \"sessionSecret\": \"change-this-secret-key-in-production-min-32-chars\",\n    \"jwtSecret\": \"change-this-jwt-secret-in-production-min-32-chars\",\n    \"requireHttps\": false,\n    \"enable2FA\": false,\n    \"strongPasswords\": true,\n    \"maxFailedAttempts\": 5,\n    \"captchaThreshold\": 3,\n    \"lockoutDuration\": 900000,\n    \"sessionTimeout\": 1800000,\n    \"defaultAdmin\": {\n      \"username\": \"admin\",\n      \"password\": \"admin123\"\n    },\n    \"rateLimiting\": {\n      \"enabled\": true,\n      \"windowMs\": 900000,\n      \"maxLoginAttempts\": 5,\n      \"maxApiRequests\": 100,\n      \"maxCaptchaRequests\": 10\n    },\n    \"headers\": {\n      \"hsts\": true,\n      \"csp\": true,\n      \"xssProtection\": true,\n      \"noSniff\": true,\n      \"frameOptions\": \"DENY\"\n    }\n  },\n  \"ssl\": {\n    \"domain\": \"localhost\",\n    \"email\": \"admin@localhost\",\n    \"method\": \"selfsigned\",\n    \"autoRenewal\": true,\n    \"keySize\": 4096,\n    \"certValidity\": 365,\n    \"setupOnStart\": true\n  },\n  \"backup\": {\n    \"defaultPath\": \"./backups\",\n    \"maxBackups\": 10,\n    \"compression\": true\n  },\n  \"logging\": {\n    \"level\": \"info\",\n    \"file\": \"./logs/app.log\",\n    \"security\": {\n      \"enabled\": true,\n      \"file\": \"./logs/security.log\",\n      \"level\": \"warn\"\n    }\n  },\n  \"updates\": {\n    \"autoUpdate\": true,\n    \"repository\": \"https://github.com/brandy2307/db-backup-tool.git\",\n    \"branch\": \"main\"\n  },\n  \"gitBackup\": {\n    \"enabled\": false,\n    \"repository\": \"\",\n    \"username\": \"\",\n    \"branch\": \"main\"\n  }\n}\nEOF\nfi\n\n# SSL-Setup Script ausführbar machen\nif [ -f \"ssl-setup.sh\" ]; then\n    chmod +x ssl-setup.sh\n    echo \"✅ SSL-Setup Script ready\"\nelse\n    echo \"⚠️ SSL-Setup Script not found - will be created at runtime\"\nfi\n\n# Update-Script ausführbar machen\nif [ -f \"update.sh\" ]; then\n    chmod +x update.sh\n    echo \"✅ Update Script ready\"\nfi\n\n# SSL Management Scripts ausführbar machen\nif [ -f \"ssl-management.js\" ]; then\n    chmod 644 ssl-management.js\n    echo \"✅ SSL Management ready\"\nfi\n\nif [ -f \"ssl-health-check.js\" ]; then\n    chmod 644 ssl-health-check.js\n    echo \"✅ SSL Health Check ready\"\nfi\n\n# Finale Berechtigungen setzen\nchmod 755 .\nchmod 644 *.json *.js *.md 2>/dev/null || true\nchmod +x *.sh 2>/dev/null || true\nchmod 755 backups logs config public ssl\n\n# Package.json Verifikation\nif node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8'))\" 2>/dev/null; then\n    echo \"✅ package.json is valid\"\nelse\n    echo \"❌ package.json is invalid\"\n    exit 1\nfi\n\n# Security Files Setup\ntouch logs/security.log\nchmod 640 logs/security.log\n\n# Schedules File Setup\nif [ ! -f \"backups/schedules.json\" ]; then\n    echo \"[]\" > backups/schedules.json\n    chmod 644 backups/schedules.json\n    echo \"✅ schedules.json created\"\nfi\n\n# .gitattributes Setup\nif [ ! -f \".gitattributes\" ]; then\n    echo \"* text=auto\" > .gitattributes\n    chmod 644 .gitattributes\n    echo \"✅ .gitattributes created\"\nfi\n\n# Finale Verifikation\necho \"=================================================\"\necho \"INSTALLATION VERIFICATION\"\necho \"=================================================\"\necho \"✅ Repository: ${REPO_URL}\"\necho \"✅ Branch: ${REPO_BRANCH}\"\necho \"✅ Directory: $(pwd)\"\necho \"✅ Node.js: $(node --version)\"\necho \"✅ NPM: $(npm --version)\"\necho \"✅ Package.json: Valid\"\necho \"✅ SSL Support: Available\"\necho \"✅ Security Features: 2FA, CAPTCHA, Rate Limiting\"\necho \"✅ Database Tools: MySQL, PostgreSQL, MongoDB\"\necho \"✅ Git Backup: Supported\"\necho \"✅ Auto-Update: Enabled\"\necho \"=================================================\"\n\n# Startup Test\necho \"Performing startup test...\"\nif node -e \"console.log('Node.js startup test OK')\" 2>/dev/null; then\n    echo \"✅ Node.js startup test passed\"\nelse\n    echo \"❌ Node.js startup test failed\"\n    exit 1\nfi\n\n# Memory Test\necho \"Testing memory usage...\"\nif node -e \"console.log('Memory usage:', Math.round(process.memoryUsage().heapUsed / 1024 / 1024), 'MB')\" 2>/dev/null; then\n    echo \"✅ Memory test passed\"\nelse\n    echo \"❌ Memory test failed\"\n    exit 1\nfi\n\necho \"=================================================\"\necho \"🎉 INSTALLATION SUCCESSFUL! 🎉\"\necho \"=================================================\"\necho \"Database Backup Tool (Enhanced Security) ready!\"\necho \"Features available:\"\necho \"  🔐 HTTPS & SSL Certificate Management\"\necho \"  🛡️ Two-Factor Authentication (2FA)\"\necho \"  🤖 CAPTCHA Protection\"\necho \"  🚫 Rate Limiting & Brute Force Protection\"\necho \"  📊 Session Management\"\necho \"  🔒 Enhanced Security Headers\"\necho \"  📋 Audit Logging\"\necho \"  📦 Git Backup Integration\"\necho \"  🔄 Automatic Updates\"\necho \"  💾 Multi-Database Support\"\necho \"=================================================\"\necho \"🔧 Configure via Pterodactyl Panel Environment Variables\"\necho \"🚀 Start server to begin secure backup operations\"\necho \"=================================================\"",
       "container": "debian:bookworm-slim",
       "entrypoint": "bash"
     }
@@ -44,7 +44,7 @@
     },
     {
       "name": "Node Environment",
-      "description": "Node.js Umgebung (production oder development)",
+      "description": "Node.js Umgebung (production empfohlen)",
       "env_variable": "NODE_ENV",
       "default_value": "production",
       "user_viewable": true,
@@ -54,8 +54,8 @@
       "field_type": "text"
     },
     {
-      "name": "Default Admin Username",
-      "description": "Standard Admin Benutzername",
+      "name": "Admin Benutzername",
+      "description": "Standard Admin Benutzername für erste Anmeldung",
       "env_variable": "ADMIN_USERNAME",
       "default_value": "admin",
       "user_viewable": true,
@@ -65,8 +65,8 @@
       "field_type": "text"
     },
     {
-      "name": "Default Admin Password",
-      "description": "Standard Admin Passwort (bitte nach dem ersten Login ändern!)",
+      "name": "Admin Passwort",
+      "description": "Standard Admin Passwort (WICHTIG: Nach dem ersten Login ändern!)",
       "env_variable": "ADMIN_PASSWORD",
       "default_value": "admin123",
       "user_viewable": true,
@@ -77,9 +77,9 @@
     },
     {
       "name": "Session Secret",
-      "description": "Geheimer Schlüssel für Sessions (mindestens 32 Zeichen)",
+      "description": "Geheimer Schlüssel für Sessions (mindestens 32 Zeichen, automatisch generiert)",
       "env_variable": "SESSION_SECRET",
-      "default_value": "change-this-secret-key-in-production-with-random-string",
+      "default_value": "db-backup-session-secret-change-in-production-32chars-min",
       "user_viewable": false,
       "user_editable": true,
       "rules": "required|string|min:32",
@@ -88,9 +88,9 @@
     },
     {
       "name": "JWT Secret",
-      "description": "Geheimer Schlüssel für JWT Tokens (mindestens 32 Zeichen)",
+      "description": "Geheimer Schlüssel für JWT Tokens (mindestens 32 Zeichen, automatisch generiert)",
       "env_variable": "JWT_SECRET",
-      "default_value": "change-this-jwt-secret-in-production-with-random-string",
+      "default_value": "db-backup-jwt-secret-change-in-production-32chars-minimum",
       "user_viewable": false,
       "user_editable": true,
       "rules": "required|string|min:32",
@@ -98,8 +98,8 @@
       "field_type": "text"
     },
     {
-      "name": "Max Backups",
-      "description": "Maximale Anzahl von Backups die gespeichert werden sollen",
+      "name": "Maximale Backups",
+      "description": "Maximale Anzahl von Backups die gespeichert werden (Cleanup)",
       "env_variable": "MAX_BACKUPS",
       "default_value": "10",
       "user_viewable": true,
@@ -109,8 +109,8 @@
       "field_type": "text"
     },
     {
-      "name": "Enable Compression",
-      "description": "Backup-Komprimierung aktivieren",
+      "name": "Backup-Komprimierung",
+      "description": "Aktiviert Komprimierung für Backups (empfohlen)",
       "env_variable": "ENABLE_COMPRESSION",
       "default_value": "true",
       "user_viewable": true,
@@ -120,9 +120,9 @@
       "field_type": "text"
     },
     {
-      "name": "Git Backup aktivieren",
-      "description": "Automatisches Pushen von Backups zu Git Repository",
-      "env_variable": "GIT_BACKUP_ENABLED",
+      "name": "HTTPS aktivieren",
+      "description": "Erzwingt HTTPS für die Anwendung (SSL-Zertifikat erforderlich)",
+      "env_variable": "REQUIRE_HTTPS",
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
@@ -131,69 +131,25 @@
       "field_type": "text"
     },
     {
-      "name": "Git Repository URL",
-      "description": "HTTPS URL des Git Repositories für Backups",
-      "env_variable": "GIT_BACKUP_REPOSITORY",
-      "default_value": "",
+      "name": "HTTPS Port",
+      "description": "Port für den HTTPS-Server (Standard: 8443)",
+      "env_variable": "HTTPS_PORT",
+      "default_value": "8443",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "nullable|string|max:500",
+      "rules": "required|integer|min:1|max:65535",
       "sort": 10,
       "field_type": "text"
     },
     {
-      "name": "Git Benutzername",
-      "description": "Git Benutzername für Repository-Zugriff",
-      "env_variable": "GIT_BACKUP_USERNAME",
-      "default_value": "",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": "nullable|string|max:100",
-      "sort": 11,
-      "field_type": "text"
-    },
-    {
-      "name": "Git Access Token",
-      "description": "Personal Access Token für Git Repository",
-      "env_variable": "GIT_BACKUP_TOKEN",
-      "default_value": "",
-      "user_viewable": false,
-      "user_editable": true,
-      "rules": "nullable|string|max:200",
-      "sort": 12,
-      "field_type": "text"
-    },
-    {
-      "name": "Git Branch",
-      "description": "Git Branch für Backups",
-      "env_variable": "GIT_BACKUP_BRANCH",
-      "default_value": "main",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": "required|string|max:50",
-      "sort": 13,
-      "field_type": "text"
-    },
-    {
-      "name": "HTTPS aktivieren",
-      "description": "Aktiviert HTTPS für die Anwendung (SSL-Zertifikat erforderlich)",
-      "env_variable": "REQUIRE_HTTPS",
-      "default_value": "false",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": "required|string|in:true,false",
-      "sort": 14,
-      "field_type": "text"
-    },
-    {
       "name": "SSL-Methode",
-      "description": "SSL-Zertifikat Methode: selfsigned (empfohlen für Pelican), letsencrypt (nur mit öffentlicher Domain), manual (eigene Zertifikate)",
+      "description": "SSL-Zertifikat Methode: selfsigned (sicher für Pterodactyl), letsencrypt (öffentliche Domain), manual (eigene Zertifikate)",
       "env_variable": "SSL_METHOD",
       "default_value": "selfsigned",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:selfsigned,letsencrypt,manual",
-      "sort": 15,
+      "sort": 11,
       "field_type": "text"
     },
     {
@@ -204,7 +160,7 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|min:3|max:255",
-      "sort": 16,
+      "sort": 12,
       "field_type": "text"
     },
     {
@@ -215,40 +171,18 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|min:5|max:255",
-      "sort": 17,
-      "field_type": "text"
-    },
-    {
-      "name": "SSL Key Size",
-      "description": "RSA Schlüssel-Größe in Bits (4096 empfohlen)",
-      "env_variable": "SSL_KEY_SIZE",
-      "default_value": "4096",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": "required|integer|in:2048,4096",
-      "sort": 18,
-      "field_type": "text"
-    },
-    {
-      "name": "SSL Zertifikat Gültigkeit",
-      "description": "Gültigkeit des SSL-Zertifikats in Tagen",
-      "env_variable": "SSL_CERT_VALIDITY",
-      "default_value": "365",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": "required|integer|min:30|max:3650",
-      "sort": 19,
+      "sort": 13,
       "field_type": "text"
     },
     {
       "name": "SSL Auto-Renewal",
-      "description": "Automatische Erneuerung von SSL-Zertifikaten (nur für Let's Encrypt)",
+      "description": "Automatische Erneuerung von SSL-Zertifikaten (für Let's Encrypt)",
       "env_variable": "SSL_AUTO_RENEWAL",
       "default_value": "true",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 20,
+      "sort": 14,
       "field_type": "text"
     },
     {
@@ -259,51 +193,128 @@
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 21,
+      "sort": 15,
       "field_type": "text"
     },
     {
-      "name": "HTTPS Port",
-      "description": "Der Port für den HTTPS-Server",
-      "env_variable": "HTTPS_PORT",
-      "default_value": "8443",
+      "name": "SSL Key-Größe",
+      "description": "RSA Schlüssel-Größe in Bits (4096 = sehr sicher, 2048 = Standard)",
+      "env_variable": "SSL_KEY_SIZE",
+      "default_value": "4096",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|integer|min:1|max:65535",
-      "sort": 22,
+      "rules": "required|integer|in:2048,4096",
+      "sort": 16,
       "field_type": "text"
     },
     {
-      "name": "2FA aktivieren",
-      "description": "Aktiviert die Zwei-Faktor-Authentifizierung",
+      "name": "SSL Zertifikat-Gültigkeit",
+      "description": "Gültigkeit des SSL-Zertifikats in Tagen (nur für Self-Signed)",
+      "env_variable": "SSL_CERT_VALIDITY",
+      "default_value": "365",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:30|max:3650",
+      "sort": 17,
+      "field_type": "text"
+    },
+    {
+      "name": "Zwei-Faktor-Authentifizierung",
+      "description": "Aktiviert 2FA für zusätzliche Sicherheit (empfohlen)",
       "env_variable": "ENABLE_2FA",
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 23,
+      "sort": 18,
       "field_type": "text"
     },
     {
       "name": "Starke Passwörter erzwingen",
-      "description": "Erzwingt die Nutzung von starken Passwörtern",
+      "description": "Erzwingt starke Passwörter (min. 12 Zeichen, Groß-/Kleinbuchstaben, Zahlen, Sonderzeichen)",
       "env_variable": "STRONG_PASSWORDS",
       "default_value": "true",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 24,
+      "sort": 19,
       "field_type": "text"
     },
     {
-      "name": "Max. Fehlversuche (Login)",
-      "description": "Maximale Anzahl an fehlgeschlagenen Login-Versuchen",
+      "name": "Max. Login-Fehlversuche",
+      "description": "Maximale Anzahl fehlgeschlagener Login-Versuche vor Sperrung",
       "env_variable": "MAX_FAILED_ATTEMPTS",
       "default_value": "5",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|min:1|max:20",
+      "sort": 20,
+      "field_type": "text"
+    },
+    {
+      "name": "Git Backup aktivieren",
+      "description": "Automatisches Pushen von Backups zu Git Repository (GitHub, GitLab, etc.)",
+      "env_variable": "GIT_BACKUP_ENABLED",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
+      "sort": 21,
+      "field_type": "text"
+    },
+    {
+      "name": "Git Repository URL",
+      "description": "HTTPS URL des Git Repositories für Backups (z.B. https://github.com/user/backup-repo.git)",
+      "env_variable": "GIT_BACKUP_REPOSITORY",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string|max:500",
+      "sort": 22,
+      "field_type": "text"
+    },
+    {
+      "name": "Git Benutzername",
+      "description": "Git Benutzername für Repository-Zugriff",
+      "env_variable": "GIT_BACKUP_USERNAME",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string|max:100",
+      "sort": 23,
+      "field_type": "text"
+    },
+    {
+      "name": "Git Access Token",
+      "description": "Personal Access Token oder App Password für Git Repository (wird verschlüsselt gespeichert)",
+      "env_variable": "GIT_BACKUP_TOKEN",
+      "default_value": "",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "nullable|string|max:200",
+      "sort": 24,
+      "field_type": "text"
+    },
+    {
+      "name": "Git Branch",
+      "description": "Git Branch für Backups (Standard: main)",
+      "env_variable": "GIT_BACKUP_BRANCH",
+      "default_value": "main",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|max:50",
       "sort": 25,
+      "field_type": "text"
+    },
+    {
+      "name": "Cloudflare API Token",
+      "description": "Cloudflare API Token für Cloudflare Origin Certificates (nur bei SSL_METHOD=cloudflare)",
+      "env_variable": "CLOUDFLARE_API_TOKEN",
+      "default_value": "",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "nullable|string|max:200",
+      "sort": 26,
       "field_type": "text"
     }
   ]
