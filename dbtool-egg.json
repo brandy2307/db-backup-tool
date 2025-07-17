@@ -148,7 +148,7 @@
       "default_value": "selfsigned",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|string|in:selfsigned,letsencrypt,manual",
+      "rules": "required|string|in:cloudflare,selfsigned,letsencrypt,manual",
       "sort": 11,
       "field_type": "text"
     },
