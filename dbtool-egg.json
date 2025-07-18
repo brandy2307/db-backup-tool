@@ -4,11 +4,11 @@
     "version": "PTDL_v2",
     "update_url": "https://github.com/brandy2307/db-backup-tool/blob/main/dbtool-egg.json"
   },
-  "exported_at": "2024-12-15T14:40:56+00:00",
-  "name": "DB Backup Tool (Port-Fixed - Complete)",
+  "exported_at": "2024-12-15T16:30:00+00:00",
+  "name": "DB Backup Tool (Enhanced SSL Debug)",
   "author": "brandy@example.com",
   "uuid": "db9f372e-01d7-4c9b-a109-e49990d68d46",
-  "description": "Sicheres automatisiertes Datenbank-Backup-Tool mit SSL-Unterstützung - PORT-KONFIGURATION KORRIGIERT",
+  "description": "Sicheres automatisiertes Datenbank-Backup-Tool mit erweiterten SSL-Debugging-Funktionen",
   "features": [
     "eula=false"
   ],
@@ -25,28 +25,7 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# Database Backup Tool Installation - PORT-KONFIGURATION KORRIGIERT\n\nset -e\n\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\n# Fest definiertes Repository\nREPO_URL=\"https://github.com/brandy2307/db-backup-tool.git\"\nREPO_BRANCH=\"main\"\n\necho \"=================================================\"\necho \"DB BACKUP TOOL INSTALLATION (PORT-FIXED)\"\necho \"=================================================\"\necho \"Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Target: ${APP_DIR}\"\necho \"Features: Port-Fix + Enhanced SSL + Security\"\necho \"HTTP Port: ${HTTP_PORT:-8080}\"\necho \"HTTPS Port: ${HTTPS_PORT:-8443}\"\necho \"Let's Encrypt Port: ${LETSENCRYPT_PORT:-80}\"\necho \"=================================================\"\n\n# System Dependencies\necho \"[1/8] Installing system dependencies...\"\napt update\napt install -y wget curl gnupg2 software-properties-common git openssl ca-certificates lsb-release\n\n# Node.js\necho \"[2/8] Installing Node.js 18...\"\ncurl -fsSL https://deb.nodesource.com/setup_18.x | bash -\napt install -y nodejs\n\n# Database Tools\necho \"[3/8] Installing database tools...\"\napt install -y mysql-client || echo \"MySQL client optional\"\napt install -y postgresql-client || echo \"PostgreSQL client optional\"\napt install -y mongodb-database-tools || echo \"MongoDB tools optional\"\n\n# SSL Tools + Network Tools für Port-Checks\necho \"[4/8] Installing SSL and network tools...\"\napt install -y certbot openssl ca-certificates net-tools\n\n# Git Setup\necho \"[5/8] Configuring Git...\"\ngit config --global init.defaultBranch main\ngit config --global user.name \"DB Backup Tool\"\ngit config --global user.email \"backup@localhost\"\n\n# Repository Clone\necho \"[6/8] Cloning repository...\"\ncd \"${DIR}\"\nrm -rf \"${APP_DIR}\" 2>/dev/null || true\ngit clone -b \"${REPO_BRANCH}\" \"${REPO_URL}\" \"${APP_DIR}\"\ncd \"${APP_DIR}\"\n\n# Dependencies\necho \"[7/8] Installing dependencies...\"\nnpm cache clean --force\nnpm install --production --no-audit --no-fund\n\n# Directory Setup\necho \"Creating directories...\"\nmkdir -p backups logs config public ssl\nchmod 700 ssl\nchmod 755 backups logs config public\n\n# SSL Setup mit Port-Konfiguration\necho \"[8/8] Setting up SSL with port configuration...\"\nif [ \"${SSL_SETUP_ON_START:-true}\" = \"true\" ] && [ \"${REQUIRE_HTTPS:-false}\" = \"true\" ]; then\n    echo \"🔐 SSL-Setup wird vorbereitet mit Port-Konfiguration...\"\n    \n    # Port-Variablen setzen\n    export SSL_DOMAIN=\"${SSL_DOMAIN:-localhost}\"\n    export SSL_METHOD=\"${SSL_METHOD:-selfsigned}\"\n    export SSL_KEY_SIZE=\"${SSL_KEY_SIZE:-4096}\"\n    export SSL_CERT_VALIDITY=\"${SSL_CERT_VALIDITY:-365}\"\n    export HTTP_PORT=\"${HTTP_PORT:-8080}\"\n    export HTTPS_PORT=\"${HTTPS_PORT:-8443}\"\n    export LETSENCRYPT_PORT=\"${LETSENCRYPT_PORT:-80}\"\n    \n    echo \"🌐 Port-Konfiguration:\"\n    echo \"   HTTP Port: ${HTTP_PORT}\"\n    echo \"   HTTPS Port: ${HTTPS_PORT}\"\n    echo \"   Let's Encrypt Port: ${LETSENCRYPT_PORT}\"\n    \n    # Enhanced SSL-Setup Script mit Port-Fix erstellen\n    cat > ./ssl-setup.sh << 'EOF'\n#!/bin/bash\nset -e\n\n# Port-Konfiguration aus Umgebungsvariablen\nSSL_DOMAIN=\"${SSL_DOMAIN:-localhost}\"\nSSL_METHOD=\"${SSL_METHOD:-selfsigned}\"\nSSL_KEY_SIZE=\"${SSL_KEY_SIZE:-4096}\"\nSSL_CERT_VALIDITY=\"${SSL_CERT_VALIDITY:-365}\"\nHTTP_PORT=\"${HTTP_PORT:-8080}\"\nHTTPS_PORT=\"${HTTPS_PORT:-8443}\"\nLETSENCRYPT_PORT=\"${LETSENCRYPT_PORT:-80}\"\n\necho \"🔐 SSL-Setup für ${SSL_DOMAIN} (Methode: ${SSL_METHOD})\"\necho \"🌐 Port-Konfiguration: HTTP=${HTTP_PORT}, HTTPS=${HTTPS_PORT}, LE=${LETSENCRYPT_PORT}\"\n\nmkdir -p ssl\nchmod 700 ssl\n\n# Port-Verfügbarkeit prüfen\ncheck_port() {\n    local port=$1\n    local name=$2\n    echo \"🔍 Prüfe Port ${port} (${name})...\"\n    \n    if command -v netstat >/dev/null 2>&1; then\n        if netstat -tlnp 2>/dev/null | grep -q \":${port} \"; then\n            echo \"⚠️ Port ${port} ist belegt\"\n            return 1\n        fi\n    elif command -v ss >/dev/null 2>&1; then\n        if ss -tlnp 2>/dev/null | grep -q \":${port} \"; then\n            echo \"⚠️ Port ${port} ist belegt\"\n            return 1\n        fi\n    fi\n    \n    echo \"✅ Port ${port} verfügbar\"\n    return 0\n}\n\n# HTTPS Port validieren\nif ! check_port \"${HTTPS_PORT}\" \"HTTPS\"; then\n    echo \"❌ HTTPS Port ${HTTPS_PORT} ist nicht verfügbar\"\n    echo \"💡 Bitte anderen Port wählen oder belegenden Service stoppen\"\n    exit 1\nfi\n\nif [ \"${SSL_METHOD}\" = \"selfsigned\" ]; then\n    echo \"🔄 Erstelle Enhanced Self-Signed Zertifikat...\"\n    \n    # Enhanced OpenSSL Config für Browser-Kompatibilität\n    cat > ssl/openssl.cnf << 'SSLCONF'\n[req]\ndistinguished_name = req_distinguished_name\nreq_extensions = v3_req\nprompt = no\nx509_extensions = v3_ca\n\n[req_distinguished_name]\nC = DE\nST = NRW\nL = Docker\nO = DB Backup Tool\nCN = DOMAIN_PLACEHOLDER\n\n[v3_req]\nbasicConstraints = CA:FALSE\nkeyUsage = nonRepudiation, digitalSignature, keyEncipherment\nextendedKeyUsage = serverAuth, clientAuth\nsubjectAltName = @alt_names\n\n[v3_ca]\nbasicConstraints = CA:FALSE\nkeyUsage = nonRepudiation, digitalSignature, keyEncipherment\nextendedKeyUsage = serverAuth, clientAuth\nsubjectAltName = @alt_names\n\n[alt_names]\nDNS.1 = DOMAIN_PLACEHOLDER\nDNS.2 = localhost\nIP.1 = 127.0.0.1\nIP.2 = ::1\nSSLCONF\n    \n    # Domain in Config einsetzen\n    sed -i \"s/DOMAIN_PLACEHOLDER/${SSL_DOMAIN}/g\" ssl/openssl.cnf\n    \n    # Zertifikat erstellen mit Enhanced KeyUsage\n    openssl req -x509 -newkey rsa:${SSL_KEY_SIZE} \\\n        -keyout ssl/privkey.pem \\\n        -out ssl/fullchain.pem \\\n        -days ${SSL_CERT_VALIDITY} \\\n        -nodes \\\n        -config ssl/openssl.cnf \\\n        -extensions v3_ca\n    \n    rm -f ssl/openssl.cnf\n    \n    # Validierung\n    if openssl x509 -in ssl/fullchain.pem -text -noout | grep -q \"digitalSignature\"; then\n        echo \"✅ Enhanced SSL-Zertifikat mit korrekter KeyUsage erstellt\"\n        echo \"🌐 Browser-Kompatibilität: ERR_SSL_KEY_USAGE_INCOMPATIBLE behoben\"\n        echo \"🚪 HTTPS Port: ${HTTPS_PORT}\"\n    else\n        echo \"⚠️ KeyUsage möglicherweise nicht optimal\"\n    fi\n    \nelif [ \"${SSL_METHOD}\" = \"letsencrypt\" ]; then\n    echo \"🔄 Let's Encrypt Setup mit Port-Konfiguration...\"\n    \n    # Validierung für Let's Encrypt\n    if [ \"${SSL_DOMAIN}\" = \"localhost\" ]; then\n        echo \"❌ Let's Encrypt funktioniert nicht mit localhost\"\n        echo \"🔄 Verwende Self-Signed Fallback\"\n        SSL_METHOD=\"selfsigned\"\n        exec \"$0\"\n    fi\n    \n    # Let's Encrypt Port prüfen\n    if ! check_port \"${LETSENCRYPT_PORT}\" \"Let's Encrypt\"; then\n        echo \"⚠️ Let's Encrypt Port ${LETSENCRYPT_PORT} belegt - stoppe Services\"\n        systemctl stop nginx 2>/dev/null || true\n        systemctl stop apache2 2>/dev/null || true\n        systemctl stop httpd 2>/dev/null || true\n        \n        sleep 2\n        if ! check_port \"${LETSENCRYPT_PORT}\" \"Let's Encrypt\"; then\n            echo \"❌ Port ${LETSENCRYPT_PORT} konnte nicht freigegeben werden\"\n            echo \"🔄 Verwende Self-Signed Fallback\"\n            SSL_METHOD=\"selfsigned\"\n            exec \"$0\"\n        fi\n    fi\n    \n    # Certbot installieren falls nicht vorhanden\n    if ! command -v certbot >/dev/null 2>&1; then\n        echo \"📦 Installiere Certbot...\"\n        apt-get update >/dev/null 2>&1\n        apt-get install -y certbot >/dev/null 2>&1\n    fi\n    \n    # Let's Encrypt Zertifikat holen\n    echo \"📡 Hole Let's Encrypt Zertifikat (Port: ${LETSENCRYPT_PORT})...\"\n    if certbot certonly --standalone --non-interactive --agree-tos \\\n        --email \"${SSL_EMAIL:-admin@${SSL_DOMAIN}}\" \\\n        --domains \"${SSL_DOMAIN}\" \\\n        --key-type rsa --rsa-key-size \"${SSL_KEY_SIZE}\" \\\n        --http-01-port \"${LETSENCRYPT_PORT}\"; then\n        \n        # Zertifikate kopieren\n        if [ -d \"/etc/letsencrypt/live/${SSL_DOMAIN}\" ]; then\n            cp \"/etc/letsencrypt/live/${SSL_DOMAIN}/fullchain.pem\" ssl/fullchain.pem\n            cp \"/etc/letsencrypt/live/${SSL_DOMAIN}/privkey.pem\" ssl/privkey.pem\n            echo \"✅ Let's Encrypt Zertifikat erstellt\"\n            echo \"🚪 HTTPS Port: ${HTTPS_PORT}\"\n        else\n            echo \"❌ Let's Encrypt Zertifikat-Verzeichnis nicht gefunden\"\n            echo \"🔄 Verwende Self-Signed Fallback\"\n            SSL_METHOD=\"selfsigned\"\n            exec \"$0\"\n        fi\n    else\n        echo \"❌ Let's Encrypt fehlgeschlagen\"\n        echo \"🔄 Verwende Self-Signed Fallback\"\n        SSL_METHOD=\"selfsigned\"\n        exec \"$0\"\n    fi\n    \nelse\n    echo \"⚠️ SSL-Methode ${SSL_METHOD} - verwende Self-Signed Fallback\"\n    SSL_METHOD=\"selfsigned\"\n    exec \"$0\"\nfi\n\n# Berechtigungen setzen\nchmod 644 ssl/fullchain.pem 2>/dev/null || true\nchmod 600 ssl/privkey.pem 2>/dev/null || true\n\n# Validierung\nif openssl x509 -in ssl/fullchain.pem -text -noout >/dev/null 2>&1; then\n    echo \"✅ SSL-Zertifikat erfolgreich validiert\"\n    echo \"📋 Zertifikat-Details:\"\n    openssl x509 -in ssl/fullchain.pem -subject -dates -noout 2>/dev/null || echo \"Details nicht verfügbar\"\n    echo \"🌐 Port-Info:\"\n    echo \"   HTTP: ${HTTP_PORT}\"\n    echo \"   HTTPS: ${HTTPS_PORT}\"\nelse\n    echo \"❌ SSL-Zertifikat ungültig\"\n    exit 1\nfi\n\necho \"🎉 SSL-Setup mit Port-Konfiguration abgeschlossen!\"\nEOF\n    \n    chmod +x ./ssl-setup.sh\n    \n    # SSL-Setup ausführen\n    echo \"🔄 Führe SSL-Setup mit Port-Konfiguration aus...\"\n    if ./ssl-setup.sh; then\n        echo \"✅ SSL-Setup erfolgreich\"\n        if [ -f \"ssl/fullchain.pem\" ] && [ -f \"ssl/privkey.pem\" ]; then\n            echo \"🔐 HTTPS-Zertifikate erstellt\"\n            echo \"🌐 Enhanced Browser-Kompatibilität aktiviert\"\n            echo \"🚪 HTTPS Port: ${HTTPS_PORT}\"\n        fi\n    else\n        echo \"⚠️ SSL-Setup fehlgeschlagen - HTTP Fallback aktiv\"\n    fi\nelse\n    echo \"ℹ️ SSL-Setup übersprungen (deaktiviert)\"\nfi\n\n# Finale Berechtigungen\nchmod 755 .\nchmod 644 *.json *.js *.md 2>/dev/null || true\nchmod +x *.sh 2>/dev/null || true\n\n# Grundlegende Dateien erstellen\ntouch logs/security.log\necho \"[]\" > backups/schedules.json 2>/dev/null || true\necho \"* text=auto\" > .gitattributes 2>/dev/null || true\n\n# Validierung\necho \"Validiere Installation...\"\nif node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8'))\" 2>/dev/null; then\n    echo \"✅ package.json gültig\"\nelse\n    echo \"❌ package.json ungültig\"\n    exit 1\nfi\n\necho \"=================================================\"\necho \"🎉 INSTALLATION ERFOLGREICH ABGESCHLOSSEN!\"\necho \"=================================================\"\necho \"✅ Repository: ${REPO_URL}\"\necho \"✅ Branch: ${REPO_BRANCH}\"\necho \"✅ Node.js: $(node --version 2>/dev/null || echo 'Unknown')\"\necho \"✅ NPM: $(npm --version 2>/dev/null || echo 'Unknown')\"\necho \"✅ Port-Fix: Dynamische Port-Konfiguration aktiviert\"\necho \"✅ Enhanced SSL: Browser-Kompatibilität verbessert\"\necho \"✅ Security Features: 2FA, CAPTCHA, Rate Limiting\"\necho \"✅ Database Support: MySQL, PostgreSQL, MongoDB\"\necho \"✅ Git Backup: Unterstützt\"
-echo \"✅ Auto-Update: Aktiviert\"
-
-echo \"🌐 PORT-KONFIGURATION:\"
-echo \"   HTTP Port: ${HTTP_PORT:-8080}\"
-echo \"   HTTPS Port: ${HTTPS_PORT:-8443}\"
-echo \"   Let's Encrypt Port: ${LETSENCRYPT_PORT:-80}\"
-
-if [ -f \"ssl/fullchain.pem\" ] && [ -f \"ssl/privkey.pem\" ]; then
-    echo \"🔐 SSL Status: Zertifikate verfügbar\"
-    echo \"🌐 Browser Fix: ERR_SSL_KEY_USAGE_INCOMPATIBLE behoben\"
-    echo \"🚪 HTTPS verfügbar auf Port: ${HTTPS_PORT:-8443}\"
-else
-    echo \"ℹ️ SSL Status: Wird beim ersten Start erstellt\"
-fi
-
-echo \"=================================================\"
-echo \"🚀 SERVER BEREIT ZUM STARTEN!\"
-echo \"🔧 Konfiguration über Pterodactyl Umgebungsvariablen\"
-echo \"📝 Standard Login: admin / admin123 (bitte ändern!)\"
-echo \"🌐 URL: https://[deine-domain]:${HTTPS_PORT:-8443}\"
-echo \"=================================================\"",
+      "script": "#!/bin/bash\n# Enhanced Database Backup Tool Installation mit SSL-Debugging\n\nset -e\n\ndeclare -r DIR=\"/mnt/server\"\ndeclare -r APP_DIR=\"${DIR}/db-backup-tool\"\n\n# Fest definiertes Repository\nREPO_URL=\"https://github.com/brandy2307/db-backup-tool.git\"\nREPO_BRANCH=\"main\"\n\necho \"=================================================\"\necho \"DB BACKUP TOOL INSTALLATION (ENHANCED SSL DEBUG)\"\necho \"=================================================\"\necho \"Repository: ${REPO_URL}\"\necho \"Branch: ${REPO_BRANCH}\"\necho \"Target: ${APP_DIR}\"\necho \"Features: Enhanced SSL-Debugging + Docker-Fixed\"\necho \"=================================================\"\n\n# System Dependencies\necho \"[1/8] Installing system dependencies...\"\napt update\napt install -y wget curl gnupg2 software-properties-common git openssl ca-certificates lsb-release netstat-nat\n\n# Node.js\necho \"[2/8] Installing Node.js 18...\"\ncurl -fsSL https://deb.nodesource.com/setup_18.x | bash -\napt install -y nodejs\n\n# Database Tools\necho \"[3/8] Installing database tools...\"\napt install -y mysql-client || echo \"MySQL client optional\"\napt install -y postgresql-client || echo \"PostgreSQL client optional\"\napt install -y mongodb-database-tools || echo \"MongoDB tools optional\"\n\n# SSL Tools (erweitert für Debugging)\necho \"[4/8] Installing enhanced SSL tools...\"\napt install -y certbot python3-certbot-nginx python3-certbot-apache || echo \"Certbot installation failed - will use self-signed\"\napt install -y openssl ca-certificates\napt install -y net-tools dnsutils || echo \"Network tools optional\"\n\n# Git Setup\necho \"[5/8] Configuring Git...\"\ngit config --global init.defaultBranch main\ngit config --global user.name \"DB Backup Tool\"\ngit config --global user.email \"backup@localhost\"\n\n# Repository Clone\necho \"[6/8] Cloning repository...\"\ncd \"${DIR}\"\nrm -rf \"${APP_DIR}\" 2>/dev/null || true\ngit clone -b \"${REPO_BRANCH}\" \"${REPO_URL}\" \"${APP_DIR}\"\ncd \"${APP_DIR}\"\n\n# Dependencies\necho \"[7/8] Installing dependencies...\"\nnpm cache clean --force\nnpm install --production --no-audit --no-fund\n\n# Directory Setup\necho \"Creating directories...\"\nmkdir -p backups logs config public ssl\nchmod 700 ssl\nchmod 755 backups logs config public\n\n# Enhanced SSL Setup Script mit Debug-Support\necho \"[8/8] Setting up enhanced SSL with debugging...\"\ncat > ./ssl-setup-simple.sh << 'SSLEOF'\n#!/bin/bash\nset -e\n\n# Debug-Konfiguration aus Umgebungsvariablen\nDEBUG=\"${SSL_DEBUG:-false}\"\nVERBOSE=\"${SSL_VERBOSE:-false}\"\nSSL_DOMAIN=\"${SSL_DOMAIN:-localhost}\"\nSSL_METHOD=\"${SSL_METHOD:-selfsigned}\"\nSSL_KEY_SIZE=\"${SSL_KEY_SIZE:-4096}\"\nSSL_CERT_VALIDITY=\"${SSL_CERT_VALIDITY:-365}\"\nLETS_ENCRYPT_PORT=\"${LETS_ENCRYPT_PORT:-80}\"\nFORCE_DOMAIN_VALIDATION=\"${FORCE_DOMAIN_VALIDATION:-false}\"\n\n# Logging-Funktionen\nlog_info() { \n    echo \"[INFO] $@\"\n    if [ \"$DEBUG\" = \"true\" ]; then\n        echo \"$(date): [INFO] $@\" >> ssl/ssl-debug.log\n    fi\n}\n\nlog_error() { \n    echo \"[ERROR] $@\" >&2\n    if [ \"$DEBUG\" = \"true\" ]; then\n        echo \"$(date): [ERROR] $@\" >> ssl/ssl-debug.log\n    fi\n}\n\nlog_debug() {\n    if [ \"$DEBUG\" = \"true\" ]; then\n        echo \"[DEBUG] $@\"\n        echo \"$(date): [DEBUG] $@\" >> ssl/ssl-debug.log\n    fi\n}\n\necho \"🔐 Enhanced SSL-Setup für ${SSL_DOMAIN} (Methode: ${SSL_METHOD})\"\necho \"Debug-Modus: ${DEBUG}, Verbose: ${VERBOSE}\"\necho \"Let's Encrypt Port: ${LETS_ENCRYPT_PORT}\"\n\nmkdir -p ssl\nchmod 700 ssl\ntouch ssl/ssl-debug.log\n\n# Debug-Informationen sammeln\nif [ \"$DEBUG\" = \"true\" ]; then\n    log_debug \"=== SYSTEM DEBUG INFORMATIONEN ===\"\n    log_debug \"Hostname: $(hostname)\"\n    log_debug \"User: $(whoami)\"\n    log_debug \"Working Dir: $(pwd)\"\n    log_debug \"SSL_DOMAIN: '${SSL_DOMAIN}'\"\n    log_debug \"SSL_METHOD: '${SSL_METHOD}'\"\n    log_debug \"LETS_ENCRYPT_PORT: '${LETS_ENCRYPT_PORT}'\"\n    \n    log_debug \"=== NETZWERK STATUS ===\"\n    if command -v netstat >/dev/null 2>&1; then\n        netstat -tlnp 2>/dev/null | grep -E \":80|:443|:8080|:8443\" | while read line; do\n            log_debug \"Port: $line\"\n        done\n    fi\n    \n    log_debug \"=== DNS STATUS ===\"\n    if command -v nslookup >/dev/null 2>&1; then\n        nslookup \"$SSL_DOMAIN\" 2>&1 | while read line; do\n            log_debug \"DNS: $line\"\n        done\n    fi\nfi\n\n# SSL-Methoden-Implementierung\nif [ \"${SSL_METHOD}\" = \"selfsigned\" ]; then\n    log_info \"🔄 Erstelle Enhanced Self-Signed Zertifikat...\"\n    \n    # Enhanced OpenSSL Config für Browser-Kompatibilität\n    cat > ssl/openssl.cnf << 'CONFEOF'\n[req]\ndistinguished_name = req_distinguished_name\nreq_extensions = v3_req\nprompt = no\nx509_extensions = v3_ca\n\n[req_distinguished_name]\nC = DE\nST = NRW\nL = Docker\nO = DB Backup Tool Enhanced\nCN = DOMAIN_PLACEHOLDER\n\n[v3_req]\nbasicConstraints = CA:FALSE\nkeyUsage = nonRepudiation, digitalSignature, keyEncipherment\nextendedKeyUsage = serverAuth, clientAuth\nsubjectAltName = @alt_names\n\n[v3_ca]\nbasicConstraints = CA:FALSE\nkeyUsage = nonRepudiation, digitalSignature, keyEncipherment\nextendedKeyUsage = serverAuth, clientAuth\nsubjectAltName = @alt_names\n\n[alt_names]\nDNS.1 = DOMAIN_PLACEHOLDER\nDNS.2 = localhost\nDNS.3 = *.DOMAIN_PLACEHOLDER\nIP.1 = 127.0.0.1\nIP.2 = ::1\nCONFEOF\n    \n    # Domain in Config einsetzen\n    sed -i \"s/DOMAIN_PLACEHOLDER/${SSL_DOMAIN}/g\" ssl/openssl.cnf\n    \n    if [ \"$DEBUG\" = \"true\" ]; then\n        log_debug \"OpenSSL Config erstellt:\"\n        cat ssl/openssl.cnf | while read line; do\n            log_debug \"Config: $line\"\n        done\n    fi\n    \n    # Zertifikat erstellen mit Enhanced KeyUsage\n    log_info \"Führe OpenSSL-Befehl aus...\"\n    if openssl req -x509 -newkey rsa:${SSL_KEY_SIZE} \\\n        -keyout ssl/privkey.pem \\\n        -out ssl/fullchain.pem \\\n        -days ${SSL_CERT_VALIDITY} \\\n        -nodes \\\n        -config ssl/openssl.cnf \\\n        -extensions v3_ca 2>&1 | while read line; do\n            log_debug \"OpenSSL: $line\"\n        done; then\n        log_info \"✅ OpenSSL-Befehl erfolgreich\"\n    else\n        log_error \"❌ OpenSSL-Befehl fehlgeschlagen\"\n        exit 1\n    fi\n    \n    rm -f ssl/openssl.cnf\n    \n    # Validierung\n    if openssl x509 -in ssl/fullchain.pem -text -noout | grep -q \"digitalSignature\"; then\n        log_info \"✅ Enhanced SSL-Zertifikat mit korrekter KeyUsage erstellt\"\n        log_info \"🌐 Browser-Kompatibilität: ERR_SSL_KEY_USAGE_INCOMPATIBLE behoben\"\n    else\n        log_error \"⚠️ KeyUsage möglicherweise nicht optimal\"\n    fi\n    \nelif [ \"${SSL_METHOD}\" = \"letsencrypt\" ]; then\n    log_info \"🌐 Let's Encrypt Setup mit Debug-Informationen...\"\n    \n    # Erweiterte Validierung für Let's Encrypt\n    if [ \"$SSL_DOMAIN\" = \"localhost\" ] || [[ \"$SSL_DOMAIN\" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$ ]]; then\n        log_error \"❌ Let's Encrypt funktioniert nicht mit localhost/IP-Adressen\"\n        log_error \"Domain: $SSL_DOMAIN ist nicht für Let's Encrypt geeignet\"\n        log_error \"Verwende eine echte Domain oder wähle 'selfsigned'\"\n        exit 1\n    fi\n    \n    # DNS-Validierung\n    if command -v nslookup >/dev/null 2>&1; then\n        log_info \"Prüfe DNS-Auflösung für $SSL_DOMAIN...\"\n        if ! nslookup \"$SSL_DOMAIN\" >/dev/null 2>&1; then\n            log_error \"❌ DNS-Auflösung fehlgeschlagen für $SSL_DOMAIN\"\n            log_error \"Let's Encrypt benötigt eine öffentlich auflösbare Domain\"\n            if [ \"$FORCE_DOMAIN_VALIDATION\" != \"true\" ]; then\n                log_error \"Setze FORCE_DOMAIN_VALIDATION=true um fortzufahren\"\n                exit 1\n            fi\n        else\n            log_info \"✅ DNS-Auflösung erfolgreich\"\n        fi\n    fi\n    \n    # Port-Verfügbarkeit prüfen\n    log_info \"Prüfe Port $LETS_ENCRYPT_PORT für Let's Encrypt...\"\n    if command -v netstat >/dev/null 2>&1; then\n        if netstat -tlnp 2>/dev/null | grep -q \":$LETS_ENCRYPT_PORT \"; then\n            log_error \"❌ Port $LETS_ENCRYPT_PORT ist belegt\"\n            log_error \"Let's Encrypt benötigt Port $LETS_ENCRYPT_PORT\"\n            exit 1\n        else\n            log_info \"✅ Port $LETS_ENCRYPT_PORT ist verfügbar\"\n        fi\n    fi\n    \n    # Certbot Installation prüfen\n    if ! command -v certbot >/dev/null 2>&1; then\n        log_error \"❌ Certbot nicht gefunden\"\n        log_error \"Let's Encrypt benötigt Certbot\"\n        exit 1\n    fi\n    \n    log_info \"Führe Certbot aus...\"\n    certbot certonly \\\n        --standalone \\\n        --non-interactive \\\n        --agree-tos \\\n        --email \"${SSL_EMAIL}\" \\\n        --domains \"${SSL_DOMAIN}\" \\\n        --key-type rsa \\\n        --rsa-key-size ${SSL_KEY_SIZE} \\\n        --preferred-challenges http \\\n        --http-01-port ${LETS_ENCRYPT_PORT} 2>&1 | while read line; do\n            log_debug \"Certbot: $line\"\n            if echo \"$line\" | grep -E \"(Successfully|Congratulations)\" >/dev/null; then\n                log_info \"$line\"\n            elif echo \"$line\" | grep -E \"(Error|Failed)\" >/dev/null; then\n                log_error \"$line\"\n            fi\n        done\n    \n    # Zertifikate kopieren\n    if [ -d \"/etc/letsencrypt/live/${SSL_DOMAIN}\" ]; then\n        cp \"/etc/letsencrypt/live/${SSL_DOMAIN}/fullchain.pem\" ssl/fullchain.pem\n        cp \"/etc/letsencrypt/live/${SSL_DOMAIN}/privkey.pem\" ssl/privkey.pem\n        log_info \"✅ Let's Encrypt Zertifikat erfolgreich kopiert\"\n    else\n        log_error \"❌ Let's Encrypt Zertifikat-Verzeichnis nicht gefunden\"\n        exit 1\n    fi\n    \nelif [ \"${SSL_METHOD}\" = \"cloudflare\" ]; then\n    log_info \"☁️ Cloudflare Origin Certificate Setup...\"\n    \n    if [ -z \"${CLOUDFLARE_API_TOKEN}\" ]; then\n        log_error \"❌ CLOUDFLARE_API_TOKEN ist erforderlich\"\n        log_error \"Setze die Umgebungsvariable CLOUDFLARE_API_TOKEN\"\n        exit 1\n    fi\n    \n    log_debug \"Cloudflare Token verfügbar (${#CLOUDFLARE_API_TOKEN} Zeichen)\"\n    \n    # Hier würde die vollständige Cloudflare-Implementierung stehen\n    log_error \"❌ Cloudflare-Setup in Docker noch nicht vollständig implementiert\"\n    log_error \"Verwende 'selfsigned' als Alternative\"\n    exit 1\n    \nelse\n    log_error \"❌ Unbekannte SSL-Methode: ${SSL_METHOD}\"\n    log_error \"Unterstützte Methoden: selfsigned, letsencrypt, cloudflare\"\n    exit 1\nfi\n\n# Berechtigungen setzen\nchmod 644 ssl/fullchain.pem 2>/dev/null || true\nchmod 600 ssl/privkey.pem 2>/dev/null || true\n\n# Finale Validierung\nif openssl x509 -in ssl/fullchain.pem -text -noout >/dev/null 2>&1; then\n    log_info \"✅ SSL-Zertifikat erfolgreich validiert\"\n    \n    if [ \"$DEBUG\" = \"true\" ]; then\n        log_debug \"Zertifikat-Details:\"\n        openssl x509 -in ssl/fullchain.pem -subject -dates -noout 2>/dev/null | while read line; do\n            log_debug \"Cert: $line\"\n        done\n    fi\n    \n    # KeyUsage-Check für Browser-Kompatibilität\n    if openssl x509 -in ssl/fullchain.pem -text -noout | grep -q \"digitalSignature\"; then\n        log_info \"🌐 Browser-Kompatibilität: ✅ ERR_SSL_KEY_USAGE_INCOMPATIBLE behoben\"\n    else\n        log_error \"⚠️ Browser-Kompatibilität möglicherweise eingeschränkt\"\n    fi\nelse\n    log_error \"❌ SSL-Zertifikat ungültig\"\n    exit 1\nfi\n\nlog_info \"🎉 Enhanced SSL-Setup abgeschlossen!\"\nSSLEOF\n\n# SSL-Setup ausführbar machen\nchmod +x ./ssl-setup-simple.sh\n\n# SSL-Setup ausführen wenn aktiviert\nif [ \"${SSL_SETUP_ON_START:-true}\" = \"true\" ] && [ \"${REQUIRE_HTTPS:-false}\" = \"true\" ]; then\n    echo \"🔐 Führe Enhanced SSL-Setup aus...\"\n    \n    # Debug-Variablen für SSL-Setup setzen\n    export SSL_DEBUG=\"${SSL_DEBUG:-false}\"\n    export SSL_VERBOSE=\"${SSL_VERBOSE:-false}\"\n    export LETS_ENCRYPT_PORT=\"${LETS_ENCRYPT_PORT:-80}\"\n    export FORCE_DOMAIN_VALIDATION=\"${FORCE_DOMAIN_VALIDATION:-false}\"\n    \n    if ./ssl-setup-simple.sh; then\n        echo \"✅ Enhanced SSL-Setup erfolgreich\"\n        if [ -f \"ssl/fullchain.pem\" ] && [ -f \"ssl/privkey.pem\" ]; then\n            echo \"🔐 HTTPS-Zertifikate erstellt\"\n            echo \"🌐 Enhanced Browser-Kompatibilität aktiviert\"\n            echo \"🔍 Debug-Logs verfügbar in: ssl/ssl-debug.log\"\n        fi\n    else\n        echo \"⚠️ SSL-Setup fehlgeschlagen - HTTP Fallback aktiv\"\n        echo \"🔍 Prüfe ssl/ssl-debug.log für Details\"\n    fi\nelse\n    echo \"ℹ️ Enhanced SSL-Setup übersprungen (deaktiviert)\"\nfi\n\n# Finale Berechtigungen\nchmod 755 .\nchmod 644 *.json *.js *.md 2>/dev/null || true\nchmod +x *.sh 2>/dev/null || true\n\n# Grundlegende Dateien erstellen\ntouch logs/security.log\necho \"[]\" > backups/schedules.json 2>/dev/null || true\necho \"* text=auto\" > .gitattributes 2>/dev/null || true\n\n# Validierung\necho \"Validiere Installation...\"\nif node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8'))\" 2>/dev/null; then\n    echo \"✅ package.json gültig\"\nelse\n    echo \"❌ package.json ungültig\"\n    exit 1\nfi\n\necho \"=================================================\"\necho \"🎉 ENHANCED INSTALLATION ERFOLGREICH!\"\necho \"=================================================\"\necho \"✅ Repository: ${REPO_URL}\"\necho \"✅ Branch: ${REPO_BRANCH}\"\necho \"✅ Node.js: $(node --version 2>/dev/null || echo 'Unknown')\"\necho \"✅ NPM: $(npm --version 2>/dev/null || echo 'Unknown')\"\necho \"✅ Enhanced SSL: Mit erweiterten Debugging\"\necho \"✅ Browser Fix: ERR_SSL_KEY_USAGE_INCOMPATIBLE behoben\"\necho \"✅ Debug-Support: SSL_DEBUG, SSL_VERBOSE verfügbar\"\necho \"✅ Port-Konfiguration: LETS_ENCRYPT_PORT konfigurierbar\"\n\nif [ -f \"ssl/fullchain.pem\" ] && [ -f \"ssl/privkey.pem\" ]; then\n    echo \"🔐 SSL Status: Zertifikate verfügbar\"\nelse\n    echo \"ℹ️ SSL Status: Wird beim ersten Start erstellt\"\nfi\n\necho \"=================================================\"\necho \"🚀 SERVER BEREIT MIT ENHANCED SSL-DEBUGGING!\"\necho \"🔧 Erweiterte SSL-Konfiguration über ENV-Variablen\"\necho \"🔍 Debug-Logs: ssl/ssl-debug.log\"\necho \"=================================================\"",
       "container": "debian:bookworm-slim",
       "entrypoint": "bash"
     }
@@ -98,7 +77,7 @@ echo \"=================================================\"",
     },
     {
       "name": "Session Secret",
-      "description": "Geheimer Schlüssel für Sessions (mindestens 32 Zeichen, automatisch generiert)",
+      "description": "Geheimer Schlüssel für Sessions (mindestens 32 Zeichen)",
       "env_variable": "SESSION_SECRET",
       "default_value": "db-backup-session-secret-change-in-production-32chars-min",
       "user_viewable": false,
@@ -109,7 +88,7 @@ echo \"=================================================\"",
     },
     {
       "name": "JWT Secret",
-      "description": "Geheimer Schlüssel für JWT Tokens (mindestens 32 Zeichen, automatisch generiert)",
+      "description": "Geheimer Schlüssel für JWT Tokens (mindestens 32 Zeichen)",
       "env_variable": "JWT_SECRET",
       "default_value": "db-backup-jwt-secret-change-in-production-32chars-minimum",
       "user_viewable": false,
@@ -120,7 +99,7 @@ echo \"=================================================\"",
     },
     {
       "name": "Maximale Backups",
-      "description": "Maximale Anzahl von Backups die gespeichert werden (Cleanup)",
+      "description": "Maximale Anzahl von Backups die gespeichert werden",
       "env_variable": "MAX_BACKUPS",
       "default_value": "10",
       "user_viewable": true,
@@ -131,24 +110,13 @@ echo \"=================================================\"",
     },
     {
       "name": "Backup-Komprimierung",
-      "description": "Aktiviert Komprimierung für Backups (empfohlen)",
+      "description": "Aktiviert Komprimierung für Backups",
       "env_variable": "ENABLE_COMPRESSION",
       "default_value": "true",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
       "sort": 8,
-      "field_type": "text"
-    },
-    {
-      "name": "HTTP Port",
-      "description": "Port für HTTP-Verkehr und Weiterleitungen (Standard: wird von Pterodactyl gesetzt)",
-      "env_variable": "HTTP_PORT",
-      "default_value": "{{server.build.default.port}}",
-      "user_viewable": true,
-      "user_editable": false,
-      "rules": "required|integer|min:1|max:65535",
-      "sort": 9,
       "field_type": "text"
     },
     {
@@ -159,84 +127,73 @@ echo \"=================================================\"",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 10,
+      "sort": 9,
       "field_type": "text"
     },
     {
       "name": "HTTPS Port",
-      "description": "Port für den HTTPS-Server (Standard: 8443, muss sich vom HTTP Port unterscheiden)",
+      "description": "Port für den HTTPS-Server",
       "env_variable": "HTTPS_PORT",
       "default_value": "8443",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|min:1|max:65535",
-      "sort": 11,
-      "field_type": "text"
-    },
-    {
-      "name": "Let's Encrypt Port",
-      "description": "Port für Let's Encrypt HTTP-Challenge (Standard: 80, nur für Let's Encrypt benötigt)",
-      "env_variable": "LETSENCRYPT_PORT",
-      "default_value": "80",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": "required|integer|min:1|max:65535",
-      "sort": 12,
+      "sort": 10,
       "field_type": "text"
     },
     {
       "name": "SSL-Methode",
-      "description": "SSL-Zertifikat Methode: selfsigned (empfohlen für Docker), letsencrypt (benötigt öffentliche Domain), cloudflare (Origin Cert), manual (eigene Zertifikate)",
+      "description": "SSL-Zertifikat Methode: selfsigned (sicher), letsencrypt (echte Domain), cloudflare (Cloudflare Origin)",
       "env_variable": "SSL_METHOD",
       "default_value": "selfsigned",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:selfsigned,letsencrypt,cloudflare,manual",
-      "sort": 13,
+      "sort": 11,
       "field_type": "text"
     },
     {
       "name": "SSL Domain",
-      "description": "Domain für SSL-Zertifikat (für Let's Encrypt: echte öffentliche Domain erforderlich!)",
+      "description": "Domain für SSL-Zertifikat (für Let's Encrypt: echte Domain erforderlich!)",
       "env_variable": "SSL_DOMAIN",
-      "default_value": "brandy.exahost.de",
+      "default_value": "localhost",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|min:3|max:255",
-      "sort": 14,
+      "sort": 12,
       "field_type": "text"
     },
     {
       "name": "SSL Email",
       "description": "Email-Adresse für SSL-Zertifikat (erforderlich für Let's Encrypt)",
       "env_variable": "SSL_EMAIL",
-      "default_value": "admin@brandy.exahost.de",
+      "default_value": "admin@localhost",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|min:5|max:255",
-      "sort": 15,
+      "sort": 13,
       "field_type": "text"
     },
     {
       "name": "SSL Auto-Renewal",
-      "description": "Automatische Erneuerung von SSL-Zertifikaten (für Let's Encrypt und Cloudflare)",
+      "description": "Automatische Erneuerung von SSL-Zertifikaten",
       "env_variable": "SSL_AUTO_RENEWAL",
       "default_value": "true",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 16,
+      "sort": 14,
       "field_type": "text"
     },
     {
       "name": "SSL Setup beim Start",
-      "description": "Führt SSL-Setup automatisch beim Server-Start aus mit Port-Validierung",
+      "description": "Führt SSL-Setup automatisch beim Server-Start aus",
       "env_variable": "SSL_SETUP_ON_START",
       "default_value": "true",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 17,
+      "sort": 15,
       "field_type": "text"
     },
     {
@@ -247,29 +204,73 @@ echo \"=================================================\"",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|in:2048,4096",
-      "sort": 18,
+      "sort": 16,
       "field_type": "text"
     },
     {
       "name": "SSL Zertifikat-Gültigkeit",
-      "description": "Gültigkeit des SSL-Zertifikats in Tagen (nur für Self-Signed und Cloudflare)",
+      "description": "Gültigkeit des SSL-Zertifikats in Tagen (nur für Self-Signed)",
       "env_variable": "SSL_CERT_VALIDITY",
       "default_value": "365",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|min:30|max:3650",
+      "sort": 17,
+      "field_type": "text"
+    },
+    {
+      "name": "🔍 SSL Debug-Modus",
+      "description": "Aktiviert erweiterte Debug-Ausgaben für SSL-Setup (Troubleshooting)",
+      "env_variable": "SSL_DEBUG",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
+      "sort": 18,
+      "field_type": "text"
+    },
+    {
+      "name": "🔍 SSL Verbose-Modus",
+      "description": "Aktiviert detaillierte Ausgaben für SSL-Setup",
+      "env_variable": "SSL_VERBOSE",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
       "sort": 19,
       "field_type": "text"
     },
     {
+      "name": "🌐 Let's Encrypt Port",
+      "description": "Port für Let's Encrypt HTTP-Challenge (Standard: 80, Docker oft: 8080)",
+      "env_variable": "LETS_ENCRYPT_PORT",
+      "default_value": "80",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:1|max:65535",
+      "sort": 20,
+      "field_type": "text"
+    },
+    {
+      "name": "🔍 Domain-Validierung erzwingen",
+      "description": "Erzwingt Domain-Validierung auch bei DNS-Fehlern (nur für Debugging)",
+      "env_variable": "FORCE_DOMAIN_VALIDATION",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:true,false",
+      "sort": 21,
+      "field_type": "text"
+    },
+    {
       "name": "Zwei-Faktor-Authentifizierung",
-      "description": "Aktiviert 2FA für zusätzliche Sicherheit (empfohlen)",
+      "description": "Aktiviert 2FA für zusätzliche Sicherheit",
       "env_variable": "ENABLE_2FA",
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 20,
+      "sort": 22,
       "field_type": "text"
     },
     {
@@ -280,7 +281,7 @@ echo \"=================================================\"",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 21,
+      "sort": 23,
       "field_type": "text"
     },
     {
@@ -291,29 +292,29 @@ echo \"=================================================\"",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|integer|min:1|max:20",
-      "sort": 22,
+      "sort": 24,
       "field_type": "text"
     },
     {
       "name": "Git Backup aktivieren",
-      "description": "Automatisches Pushen von Backups zu Git Repository (GitHub, GitLab, etc.)",
+      "description": "Automatisches Pushen von Backups zu Git Repository",
       "env_variable": "GIT_BACKUP_ENABLED",
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|in:true,false",
-      "sort": 23,
+      "sort": 25,
       "field_type": "text"
     },
     {
       "name": "Git Repository URL",
-      "description": "HTTPS URL des Git Repositories für Backups (z.B. https://github.com/user/backup-repo.git)",
+      "description": "HTTPS URL des Git Repositories für Backups",
       "env_variable": "GIT_BACKUP_REPOSITORY",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
       "rules": "nullable|string|max:500",
-      "sort": 24,
+      "sort": 26,
       "field_type": "text"
     },
     {
@@ -324,40 +325,40 @@ echo \"=================================================\"",
       "user_viewable": true,
       "user_editable": true,
       "rules": "nullable|string|max:100",
-      "sort": 25,
+      "sort": 27,
       "field_type": "text"
     },
     {
       "name": "Git Access Token",
-      "description": "Personal Access Token oder App Password für Git Repository (wird verschlüsselt gespeichert)",
+      "description": "Personal Access Token oder App Password für Git Repository",
       "env_variable": "GIT_BACKUP_TOKEN",
       "default_value": "",
       "user_viewable": false,
       "user_editable": true,
       "rules": "nullable|string|max:200",
-      "sort": 26,
+      "sort": 28,
       "field_type": "text"
     },
     {
       "name": "Git Branch",
-      "description": "Git Branch für Backups (Standard: main)",
+      "description": "Git Branch für Backups",
       "env_variable": "GIT_BACKUP_BRANCH",
       "default_value": "main",
       "user_viewable": true,
       "user_editable": true,
       "rules": "required|string|max:50",
-      "sort": 27,
+      "sort": 29,
       "field_type": "text"
     },
     {
       "name": "Cloudflare API Token",
-      "description": "Cloudflare API Token für Cloudflare Origin Certificates (nur bei SSL_METHOD=cloudflare erforderlich)",
+      "description": "Cloudflare API Token für Cloudflare Origin Certificates (nur bei SSL_METHOD=cloudflare)",
       "env_variable": "CLOUDFLARE_API_TOKEN",
       "default_value": "",
       "user_viewable": false,
       "user_editable": true,
       "rules": "nullable|string|max:200",
-      "sort": 28,
+      "sort": 30,
       "field_type": "text"
     }
   ]
