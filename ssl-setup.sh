@@ -1,6 +1,6 @@
 #!/bin/bash
-# Enhanced SSL-Setup Script für Database Backup Tool - FIXED VERSION
-# Erweiterte SSL-Generierung mit besserer Fehlerbehandlung und Kompatibilität für moderne Browser
+# Enhanced SSL-Setup Script für Database Backup Tool - PORT-FIXED VERSION
+# Erweiterte SSL-Generierung mit dynamischer Port-Konfiguration und besserer Fehlerbehandlung
 
 set -e
 
@@ -11,7 +11,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Erweiterte Konfiguration
+# Erweiterte Konfiguration mit Port-Support
 DOMAIN="${SSL_DOMAIN:-localhost}"
 EMAIL="${SSL_EMAIL:-admin@localhost}"
 METHOD="${SSL_METHOD:-selfsigned}"
@@ -19,6 +19,11 @@ AUTO_RENEWAL="${SSL_AUTO_RENEWAL:-true}"
 CLOUDFLARE_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 KEY_SIZE="${SSL_KEY_SIZE:-4096}"
 CERT_VALIDITY="${SSL_CERT_VALIDITY:-365}"
+
+# PORT-KONFIGURATION (FIXED)
+HTTP_PORT="${HTTP_PORT:-8080}"
+HTTPS_PORT="${HTTPS_PORT:-8443}"
+LETSENCRYPT_PORT="${LETSENCRYPT_PORT:-80}"  # Let's Encrypt benötigt Port 80 für HTTP-Challenge
 
 # Verzeichnisse
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +44,7 @@ log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
 log_error() { log "ERROR" "$@"; }
 
-echo -e "${BLUE}🔐 Enhanced SSL-Setup für Database Backup Tool - FIXED VERSION${NC}"
+echo -e "${BLUE}🔐 Enhanced SSL-Setup für Database Backup Tool - PORT-FIXED VERSION${NC}"
 echo "============================================="
 echo -e "${BLUE}Script-Verzeichnis:${NC} $SCRIPT_DIR"
 echo -e "${BLUE}SSL-Verzeichnis:${NC} $SSL_DIR"
@@ -49,7 +54,43 @@ echo -e "${BLUE}Methode:${NC} $METHOD"
 echo -e "${BLUE}Auto-Renewal:${NC} $AUTO_RENEWAL"
 echo -e "${BLUE}Key-Größe:${NC} $KEY_SIZE bits"
 echo -e "${BLUE}Gültigkeit:${NC} $CERT_VALIDITY Tage"
+echo -e "${BLUE}HTTP Port:${NC} $HTTP_PORT"
+echo -e "${BLUE}HTTPS Port:${NC} $HTTPS_PORT"
+echo -e "${BLUE}Let's Encrypt Port:${NC} $LETSENCRYPT_PORT"
 echo "============================================="
+
+# Port-Verfügbarkeit prüfen
+check_port_availability() {
+    local port=$1
+    local service_name=$2
+    
+    log_info "Prüfe Port-Verfügbarkeit: $port ($service_name)"
+    
+    if command -v netstat &> /dev/null; then
+        if netstat -tlnp 2>/dev/null | grep -q ":$port "; then
+            log_warn "Port $port ist bereits belegt"
+            
+            # Zeige welcher Prozess den Port verwendet
+            local process=$(netstat -tlnp 2>/dev/null | grep ":$port " | awk '{print $7}' | head -1)
+            if [ -n "$process" ]; then
+                log_warn "Prozess auf Port $port: $process"
+            fi
+            
+            return 1
+        fi
+    elif command -v ss &> /dev/null; then
+        if ss -tlnp 2>/dev/null | grep -q ":$port "; then
+            log_warn "Port $port ist bereits belegt"
+            return 1
+        fi
+    else
+        log_warn "Kann Port-Status nicht prüfen (netstat/ss nicht verfügbar)"
+        return 0
+    fi
+    
+    log_info "✅ Port $port ist verfügbar"
+    return 0
+}
 
 # Dependency Check
 check_dependencies() {
@@ -112,13 +153,26 @@ prepare_ssl_directory() {
     chmod 600 "$LOG_FILE"
 }
 
-# Domain-Validierung
-validate_domain() {
-    log_info "Validiere Domain: $DOMAIN"
+# Domain-Validierung mit Port-Check
+validate_domain_and_ports() {
+    log_info "Validiere Domain und Ports: $DOMAIN"
     
     # Domain-Format prüfen
     if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
         log_error "Ungültiges Domain-Format: $DOMAIN"
+        return 1
+    fi
+    
+    # Port-Validierung
+    if [ "$HTTP_PORT" -eq "$HTTPS_PORT" ]; then
+        log_error "HTTP Port ($HTTP_PORT) und HTTPS Port ($HTTPS_PORT) dürfen nicht identisch sein"
+        return 1
+    fi
+    
+    # HTTPS Port Verfügbarkeit prüfen
+    if ! check_port_availability "$HTTPS_PORT" "HTTPS"; then
+        log_error "HTTPS Port $HTTPS_PORT ist nicht verfügbar"
+        log_info "Verfügbare Ports prüfen oder anderen Port konfigurieren"
         return 1
     fi
     
@@ -129,15 +183,69 @@ validate_domain() {
             return 1
         fi
         
+        # Let's Encrypt Port-Check
+        if ! check_port_availability "$LETSENCRYPT_PORT" "Let's Encrypt HTTP"; then
+            log_warn "Let's Encrypt Port $LETSENCRYPT_PORT ist belegt"
+            log_info "Stoppe Services die Port $LETSENCRYPT_PORT verwenden..."
+            
+            # Versuche bekannte Services zu stoppen
+            systemctl stop nginx 2>/dev/null || true
+            systemctl stop apache2 2>/dev/null || true
+            systemctl stop httpd 2>/dev/null || true
+            
+            # Erneut prüfen
+            sleep 2
+            if ! check_port_availability "$LETSENCRYPT_PORT" "Let's Encrypt HTTP"; then
+                log_error "Kann Port $LETSENCRYPT_PORT nicht freigeben für Let's Encrypt"
+                return 1
+            fi
+        fi
+        
         if ! nslookup "$DOMAIN" &> /dev/null; then
             log_warn "DNS-Auflösung für $DOMAIN fehlgeschlagen"
             log_warn "Stelle sicher, dass die Domain öffentlich erreichbar ist"
         fi
     fi
     
-    log_info "✅ Domain-Validierung erfolgreich"
+    log_info "✅ Domain- und Port-Validierung erfolgreich"
 }
 
+# Port-Informationen anzeigen
+display_port_info() {
+    log_info "Zeige Port-Konfiguration..."
+    
+    echo -e "\n${GREEN}🌐 Port-Konfiguration:${NC}"
+    echo "================================="
+    echo -e "${BLUE}HTTP Port:${NC} $HTTP_PORT"
+    echo -e "${BLUE}HTTPS Port:${NC} $HTTPS_PORT"
+    echo -e "${BLUE}Let's Encrypt Port:${NC} $LETSENCRYPT_PORT"
+    echo ""
+    
+    # Port-Status prüfen
+    echo -e "${GREEN}🔍 Port-Status:${NC}"
+    
+    if check_port_availability "$HTTP_PORT" "HTTP"; then
+        echo -e "${GREEN}✅ HTTP Port $HTTP_PORT: Verfügbar${NC}"
+    else
+        echo -e "${YELLOW}⚠️ HTTP Port $HTTP_PORT: Belegt${NC}"
+    fi
+    
+    if check_port_availability "$HTTPS_PORT" "HTTPS"; then
+        echo -e "${GREEN}✅ HTTPS Port $HTTPS_PORT: Verfügbar${NC}"
+    else
+        echo -e "${RED}❌ HTTPS Port $HTTPS_PORT: Belegt${NC}"
+    fi
+    
+    if [ "$METHOD" = "letsencrypt" ]; then
+        if check_port_availability "$LETSENCRYPT_PORT" "Let's Encrypt"; then
+            echo -e "${GREEN}✅ Let's Encrypt Port $LETSENCRYPT_PORT: Verfügbar${NC}"
+        else
+            echo -e "${YELLOW}⚠️ Let's Encrypt Port $LETSENCRYPT_PORT: Belegt${NC}"
+        fi
+    fi
+    
+    echo "================================="
+}
 # Self-Signed Zertifikat mit korrekter KeyUsage (FIXED)
 create_selfsigned_cert() {
     log_info "Erstelle Self-Signed Zertifikat mit korrekter KeyUsage..."
@@ -200,6 +308,7 @@ EOF
         log_info "✅ Self-Signed Zertifikat mit korrekter KeyUsage erstellt"
         log_info "🔍 KeyUsage: digitalSignature, keyEncipherment, nonRepudiation"
         log_info "🔍 ExtKeyUsage: serverAuth, clientAuth"
+        log_info "🌐 HTTPS Port: $HTTPS_PORT"
     else
         log_error "❌ Zertifikat hat nicht die korrekte KeyUsage"
         return 1
@@ -295,11 +404,12 @@ create_cloudflare_cert() {
     echo "$private_key" > "$SSL_DIR/privkey.pem"
     
     log_info "✅ Cloudflare Origin Zertifikat erfolgreich erstellt"
+    log_info "🌐 HTTPS Port: $HTTPS_PORT"
 }
 
-# Let's Encrypt mit erweiterten Optionen
+# Let's Encrypt mit Port-Fix (CORRECTED)
 create_letsencrypt_cert() {
-    log_info "Erstelle Let's Encrypt Zertifikat..."
+    log_info "Erstelle Let's Encrypt Zertifikat mit Port-Konfiguration..."
     
     # Certbot installieren
     if ! command -v certbot &> /dev/null; then
@@ -318,14 +428,36 @@ create_letsencrypt_cert() {
         fi
     fi
     
-    # Port 80 prüfen
-    if netstat -tlnp | grep -q ":80 "; then
-        log_warn "Port 80 ist belegt - stoppe Services"
+    # Port-Checks (FIXED - nicht hardcoded)
+    log_info "Prüfe Port-Verfügbarkeit für Let's Encrypt..."
+    
+    # Let's Encrypt Port prüfen
+    if ! check_port_availability "$LETSENCRYPT_PORT" "Let's Encrypt HTTP"; then
+        log_warn "Port $LETSENCRYPT_PORT ist belegt - versuche Services zu stoppen"
+        
+        # Stoppe bekannte Webserver
         systemctl stop nginx 2>/dev/null || true
         systemctl stop apache2 2>/dev/null || true
+        systemctl stop httpd 2>/dev/null || true
+        systemctl stop lighttpd 2>/dev/null || true
+        
+        # Warte kurz und prüfe erneut
+        sleep 3
+        if ! check_port_availability "$LETSENCRYPT_PORT" "Let's Encrypt HTTP"; then
+            log_error "Port $LETSENCRYPT_PORT konnte nicht freigegeben werden"
+            log_error "Let's Encrypt benötigt Port $LETSENCRYPT_PORT für HTTP-Challenge"
+            return 1
+        fi
     fi
     
-    # Certbot ausführen
+    # HTTPS Port für späteren Gebrauch reservieren
+    if ! check_port_availability "$HTTPS_PORT" "HTTPS (reserviert)"; then
+        log_warn "HTTPS Port $HTTPS_PORT ist belegt - könnte Probleme verursachen"
+    fi
+    
+    # Certbot ausführen (FIXED - konfigurierbare Ports)
+    log_info "Führe Certbot aus (HTTP Port: $LETSENCRYPT_PORT, HTTPS Port: $HTTPS_PORT)..."
+    
     certbot certonly \
         --standalone \
         --non-interactive \
@@ -335,7 +467,7 @@ create_letsencrypt_cert() {
         --key-type rsa \
         --rsa-key-size $KEY_SIZE \
         --preferred-challenges http \
-        --http-01-port 80 \
+        --http-01-port $LETSENCRYPT_PORT \
         --cert-path "$SSL_DIR/fullchain.pem" \
         --key-path "$SSL_DIR/privkey.pem"
     
@@ -345,6 +477,8 @@ create_letsencrypt_cert() {
         cp "$letsencrypt_path/fullchain.pem" "$SSL_DIR/fullchain.pem"
         cp "$letsencrypt_path/privkey.pem" "$SSL_DIR/privkey.pem"
         log_info "✅ Let's Encrypt Zertifikat erstellt"
+        log_info "🌐 HTTPS Port: $HTTPS_PORT"
+        log_info "📝 HTTP Challenge Port: $LETSENCRYPT_PORT"
     else
         log_error "Let's Encrypt Zertifikat-Verzeichnis nicht gefunden"
         return 1
@@ -387,6 +521,7 @@ validate_manual_cert() {
     fi
     
     log_info "✅ Manuelle Zertifikate validiert"
+    log_info "🌐 HTTPS Port: $HTTPS_PORT"
 }
 
 # Dateiberechtigungen setzen
@@ -470,19 +605,24 @@ display_cert_info() {
             echo -e "  ${YELLOW}⚠️ Firefox: Eventuell Probleme${NC}"
         fi
         
+        # Port-Information
+        echo -e "\n${GREEN}🚪 Port-Konfiguration:${NC}"
+        echo -e "  HTTPS Port: ${HTTPS_PORT}"
+        echo -e "  HTTP Port: ${HTTP_PORT}"
+        
         echo "================================="
     fi
 }
 
-# Auto-Renewal Setup mit Cloudflare-Support
+# Auto-Renewal Setup mit Port-Konfiguration
 setup_auto_renewal() {
     if [ "$AUTO_RENEWAL" = "true" ] && [ "$METHOD" != "selfsigned" ] && [ "$METHOD" != "manual" ]; then
-        log_info "Richte Auto-Renewal ein..."
+        log_info "Richte Auto-Renewal mit Port-Konfiguration ein..."
         
         # Renewal-Script erstellen
         cat > "$SSL_DIR/renewal.sh" << EOF
 #!/bin/bash
-# Auto-Renewal Script für $DOMAIN
+# Auto-Renewal Script für $DOMAIN mit Port-Konfiguration
 set -e
 
 export SSL_DOMAIN="$DOMAIN"
@@ -491,6 +631,9 @@ export SSL_METHOD="$METHOD"
 export SSL_AUTO_RENEWAL="$AUTO_RENEWAL"
 export SSL_KEY_SIZE="$KEY_SIZE"
 export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_TOKEN"
+export HTTP_PORT="$HTTP_PORT"
+export HTTPS_PORT="$HTTPS_PORT"
+export LETSENCRYPT_PORT="$LETSENCRYPT_PORT"
 
 cd "$SCRIPT_DIR"
 ./ssl-setup.sh
@@ -514,7 +657,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 0 2 * * * root $SSL_DIR/renewal.sh >> $LOG_FILE 2>&1
 EOF
         
-        log_info "✅ Auto-Renewal konfiguriert"
+        log_info "✅ Auto-Renewal mit Port-Konfiguration eingerichtet"
     else
         log_info "Auto-Renewal übersprungen"
     fi
@@ -539,12 +682,15 @@ cleanup_old_files() {
 
 # Hauptfunktion
 main() {
-    log_info "Starte Enhanced SSL-Setup mit Browser-Kompatibilitäts-Fix..."
+    log_info "Starte Enhanced SSL-Setup mit Port-Fix und Browser-Kompatibilität..."
     
     # Präparation
     check_dependencies
     prepare_ssl_directory
-    validate_domain
+    validate_domain_and_ports  # Updated function name
+    
+    # Port-Status anzeigen
+    display_port_info
     
     # Zertifikat generieren
     case "$METHOD" in
@@ -572,7 +718,7 @@ main() {
     setup_auto_renewal
     cleanup_old_files
     
-    log_info "✅ Enhanced SSL-Setup erfolgreich abgeschlossen!"
+    log_info "✅ Enhanced SSL-Setup mit Port-Konfiguration erfolgreich abgeschlossen!"
 }
 
 # Fehlerbehandlung
@@ -589,8 +735,17 @@ if [ -d "$BACKUP_DIR" ]; then
     echo -e "${BLUE}Backup der alten Zertifikate: $BACKUP_DIR${NC}"
 fi
 
+# Port-Konfiguration Info
+echo -e "\n${GREEN}🌐 PORT-KONFIGURATION:${NC}"
+echo -e "${GREEN}✅ HTTP Port: $HTTP_PORT${NC}"
+echo -e "${GREEN}✅ HTTPS Port: $HTTPS_PORT${NC}"
+if [ "$METHOD" = "letsencrypt" ]; then
+    echo -e "${GREEN}✅ Let's Encrypt Port: $LETSENCRYPT_PORT${NC}"
+fi
+
 # Browser-Kompatibilitäts-Info
 echo -e "\n${GREEN}🌐 BROWSER-KOMPATIBILITÄT:${NC}"
 echo -e "${GREEN}✅ Modernes KeyUsage für Chrome/Edge implementiert${NC}"
 echo -e "${GREEN}✅ ERR_SSL_KEY_USAGE_INCOMPATIBLE Problem behoben${NC}"
 echo -e "${GREEN}✅ Cloudflare Origin Certificate Support hinzugefügt${NC}"
+echo -e "${GREEN}✅ Dynamische Port-Konfiguration aktiviert${NC}"
